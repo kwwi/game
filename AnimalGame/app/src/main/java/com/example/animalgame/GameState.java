@@ -26,6 +26,12 @@ public final class GameState {
     @SerializedName("pieces")
     public List<StatePiece> pieces = new ArrayList<>();
 
+    @SerializedName("capturedByA")
+    public List<StatePiece> capturedByA = new ArrayList<>();
+
+    @SerializedName("capturedByB")
+    public List<StatePiece> capturedByB = new ArrayList<>();
+
     public static final class StatePiece {
         @SerializedName("id")
         public int id;

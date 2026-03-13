@@ -14,6 +14,27 @@
         android:textSize="16sp"
         android:padding="8dp" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="4dp">
+        <TextView
+            android:id="@+id/tvCapturedRed"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="14sp"
+            android:text="红方被吃：无" />
+        <TextView
+            android:id="@+id/tvCapturedBlack"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="14sp"
+            android:text="黑方被吃：无" />
+    </LinearLayout>
+
     <GridLayout
         android:id="@+id/gridBoard"
         android:layout_width="match_parent"

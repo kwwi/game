@@ -12,6 +12,8 @@
         .cell.selected { outline: 2px solid yellow; }
         .panel { margin-top: 12px; }
         button { margin-right: 8px; }
+        .captured-panel { display: flex; gap: 24px; }
+        .captured-panel span { font-size: 14px; }
     </style>
 </head>
 <body>
@@ -33,6 +35,10 @@
     </div>
     <div class="panel">
         <div id="status">未连接</div>
+    </div>
+    <div class="panel captured-panel">
+        <div>红方被吃：<span id="capturedRed"></span></div>
+        <div>黑方被吃：<span id="capturedBlack"></span></div>
     </div>
     <div id="board"></div>
 

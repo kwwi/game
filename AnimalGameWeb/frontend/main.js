@@ -77,11 +77,28 @@ document.getElementById('btnFlip').addEventListener('click', () => {
 function updateStatus() {
   if (!gameState) {
     statusEl.textContent = '未开始对局';
+    updateCaptured([], []);
     return;
   }
   statusEl.textContent =
     `对局: ${gameId} | 当前回合: ${gameState.currentSide}` +
     ` | 我方: ${mySide || '未加入'} | 结果: ${gameState.result}`;
+  const red = [];
+  const black = [];
+  const a = gameState.capturedByA || [];
+  const b = gameState.capturedByB || [];
+  if (gameState.aCamp === 'RED') a.forEach(p => red.push(p.type));
+  else if (gameState.aCamp === 'BLACK') a.forEach(p => black.push(p.type));
+  if (gameState.bCamp === 'RED') b.forEach(p => red.push(p.type));
+  else if (gameState.bCamp === 'BLACK') b.forEach(p => black.push(p.type));
+  updateCaptured(red, black);
+}
+
+function updateCaptured(redTypes, blackTypes) {
+  const elRed = document.getElementById('capturedRed');
+  const elBlack = document.getElementById('capturedBlack');
+  if (elRed) elRed.textContent = redTypes.length ? redTypes.map(t => toZh(t)).join(' ') : '无';
+  if (elBlack) elBlack.textContent = blackTypes.length ? blackTypes.map(t => toZh(t)).join(' ') : '无';
 }
 
 function startPolling() {

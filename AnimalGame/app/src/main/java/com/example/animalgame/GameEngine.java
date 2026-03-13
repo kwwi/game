@@ -26,6 +26,8 @@ public final class GameEngine {
     private Camp aCamp = null;
     private Camp bCamp = null;
     private GameResult result = GameResult.ONGOING;
+    private final List<Piece> capturedByA = new ArrayList<>();
+    private final List<Piece> capturedByB = new ArrayList<>();
 
     public GameEngine(Random rng) {
         this.rng = Objects.requireNonNull(rng);
@@ -76,6 +78,8 @@ public final class GameEngine {
     public void initRandomSetup() {
         board.clear();
         allPieces.clear();
+        capturedByA.clear();
+        capturedByB.clear();
         result = GameResult.ONGOING;
         aCamp = null;
         bCamp = null;
@@ -140,12 +144,34 @@ public final class GameEngine {
             }
             state.pieces.add(sp);
         }
+        for (Piece p : capturedByA) {
+            GameState.StatePiece sp = new GameState.StatePiece();
+            sp.id = p.id;
+            sp.type = p.type;
+            sp.camp = p.camp;
+            sp.faceDown = false;
+            sp.r = null;
+            sp.c = null;
+            state.capturedByA.add(sp);
+        }
+        for (Piece p : capturedByB) {
+            GameState.StatePiece sp = new GameState.StatePiece();
+            sp.id = p.id;
+            sp.type = p.type;
+            sp.camp = p.camp;
+            sp.faceDown = false;
+            sp.r = null;
+            sp.c = null;
+            state.capturedByB.add(sp);
+        }
         return state;
     }
 
     public void loadFromGameState(GameState state) {
         board.clear();
         allPieces.clear();
+        capturedByA.clear();
+        capturedByB.clear();
         if (state == null) {
             initRandomSetup();
             return;
@@ -157,13 +183,26 @@ public final class GameEngine {
 
         if (state.pieces != null) {
             for (GameState.StatePiece sp : state.pieces) {
-                Pos pos = (sp.r != null && sp.c != null) ? new Pos(sp.r, sp.c) : null;
+                if (sp.r == null || sp.c == null) continue;
+                Pos pos = new Pos(sp.r, sp.c);
                 Piece p = new Piece(sp.id, sp.type, sp.camp, pos);
                 p.faceDown = sp.faceDown;
                 allPieces.add(p);
-                if (pos != null) {
-                    board.put(pos, p);
-                }
+                board.put(pos, p);
+            }
+        }
+        if (state.capturedByA != null) {
+            for (GameState.StatePiece sp : state.capturedByA) {
+                Piece p = new Piece(sp.id, sp.type, sp.camp, null);
+                p.faceDown = false;
+                capturedByA.add(p);
+            }
+        }
+        if (state.capturedByB != null) {
+            for (GameState.StatePiece sp : state.capturedByB) {
+                Piece p = new Piece(sp.id, sp.type, sp.camp, null);
+                p.faceDown = false;
+                capturedByB.add(p);
             }
         }
     }
@@ -302,6 +341,19 @@ public final class GameEngine {
         movePiece(attacker, defender.pos);
         defender.pos = null;
         defender.faceDown = false;
+        if (aCamp != null && defender.camp == aCamp) {
+            capturedByA.add(defender);
+        } else if (bCamp != null && defender.camp == bCamp) {
+            capturedByB.add(defender);
+        }
+    }
+
+    public List<Piece> getCapturedByA() {
+        return capturedByA;
+    }
+
+    public List<Piece> getCapturedByB() {
+        return capturedByB;
     }
 
     private boolean canCapture(Piece attacker, Piece defender) {

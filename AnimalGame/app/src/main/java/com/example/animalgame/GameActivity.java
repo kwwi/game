@@ -19,6 +19,8 @@ public class GameActivity extends AppCompatActivity {
     private RandomAI ai;
     private GridLayout gridBoard;
     private TextView tvStatus;
+    private TextView tvCapturedRed;
+    private TextView tvCapturedBlack;
 
     private View[][] cellViews = new View[GameEngine.ROWS][GameEngine.COLS];
 
@@ -32,6 +34,8 @@ public class GameActivity extends AppCompatActivity {
         setContentView(R.layout.activity_game);
 
         tvStatus = findViewById(R.id.tvStatus);
+        tvCapturedRed = findViewById(R.id.tvCapturedRed);
+        tvCapturedBlack = findViewById(R.id.tvCapturedBlack);
         gridBoard = findViewById(R.id.gridBoard);
         Button btnFlip = findViewById(R.id.btnFlip);
         Button btnNext = findViewById(R.id.btnNext);
@@ -207,6 +211,20 @@ public class GameActivity extends AppCompatActivity {
                 }
             }
         }
+        StringBuilder red = new StringBuilder();
+        StringBuilder black = new StringBuilder();
+        Camp aCamp = game.getCampOf(Side.A);
+        Camp bCamp = game.getCampOf(Side.B);
+        for (Piece p : game.getCapturedByA()) {
+            if (p.camp == Camp.RED) red.append(p.type.zh).append(" ");
+            else black.append(p.type.zh).append(" ");
+        }
+        for (Piece p : game.getCapturedByB()) {
+            if (p.camp == Camp.RED) red.append(p.type.zh).append(" ");
+            else black.append(p.type.zh).append(" ");
+        }
+        if (tvCapturedRed != null) tvCapturedRed.setText("红方被吃：" + (red.length() > 0 ? red.toString().trim() : "无"));
+        if (tvCapturedBlack != null) tvCapturedBlack.setText("黑方被吃：" + (black.length() > 0 ? black.toString().trim() : "无"));
     }
 }
 
