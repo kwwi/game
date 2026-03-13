@@ -1,0 +1,38 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        // 使用对 Java 8 友好的 Spring Boot 2.7.x 插件
+        classpath 'org.springframework.boot:spring-boot-gradle-plugin:2.7.18'
+        classpath 'io.spring.gradle:dependency-management-plugin:1.1.4'
+    }
+}
+
+plugins {
+    id 'java'
+}
+
+apply plugin: 'org.springframework.boot'
+apply plugin: 'io.spring.dependency-management'
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    // 为兼容你当前环境，将编译目标设为 Java 8
+    sourceCompatibility = JavaVersion.VERSION_1_8
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
