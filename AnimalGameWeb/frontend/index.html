@@ -42,13 +42,14 @@
         <label>房间ID：<input id="gameIdInput" type="text" placeholder="输入房间ID加入" /></label>
         <button id="btnJoin">加入房间</button>
     </div>
-    <div class="panel">
+    <div class="panel" id="roomPanel">
         <strong>房间列表</strong>
         <button id="btnRefreshRooms">刷新</button>
         <div id="roomList"></div>
     </div>
     <div class="panel">
         <div id="status">未连接</div>
+        <button id="btnLeave">退出房间</button>
     </div>
     <div class="panel captured-panel">
         <div>红方被吃：<span id="capturedRed"></span></div>

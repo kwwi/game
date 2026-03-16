@@ -8,11 +8,15 @@ let selectedPos = null; // {r,c}
 let username = '';
 let mySide = null; // 'A' or 'B'
 let pollTimer = null;
+let roomPollTimer = null;
 
 const statusEl = document.getElementById('status');
 const boardEl = document.getElementById('board');
 const usernameInput = document.getElementById('username');
 const gameIdInput = document.getElementById('gameIdInput');
+const roomPanel = document.getElementById('roomPanel');
+const roomListEl = document.getElementById('roomList');
+const btnLeave = document.getElementById('btnLeave');
 
 function enterRoom(data) {
   gameId = data.gameId;
@@ -24,7 +28,7 @@ function enterRoom(data) {
   updateStatus();
   renderBoard();
   startPolling();
-  refreshRoomList();
+  if (roomPanel) roomPanel.style.display = 'none';
 }
 
 document.getElementById('btnQuickJoin').addEventListener('click', () => {
@@ -70,7 +74,7 @@ function refreshRoomList() {
   fetch(ROOMS_API)
     .then(r => r.json())
     .then(rooms => {
-      const el = document.getElementById('roomList');
+      const el = roomListEl;
       if (!el) return;
       if (!rooms.length) {
         el.innerHTML = '<p>暂无房间</p>';
@@ -81,14 +85,42 @@ function refreshRoomList() {
         const shortId = r.roomId ? r.roomId.slice(0, 8) : '';
         const a = (r.playerA || '—') + (r.roleA ? '<span class="role-' + (r.roleA === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
         const b = (r.playerB || '—') + (r.roleB ? '<span class="role-' + (r.roleB === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
-        const status = r.full ? '已满' : '可加入';
+        const statusCell = r.full
+          ? '已满'
+          : `<button type="button" data-room="${r.roomId}">可加入</button>`;
         const rowClass = r.full ? ' class="full"' : '';
-        html += '<tr' + rowClass + '><td>' + shortId + '</td><td>' + a + '</td><td>' + b + '</td><td>' + status + '</td></tr>';
+        html += '<tr' + rowClass + '><td>' + shortId + '</td><td>' + a + '</td><td>' + b + '</td><td>' + statusCell + '</td></tr>';
       });
       html += '</tbody></table>';
       el.innerHTML = html;
     })
-    .catch(() => { const el = document.getElementById('roomList'); if (el) el.innerHTML = '<p>加载失败</p>'; });
+    .catch(() => { const el = roomListEl; if (el) el.innerHTML = '<p>加载失败</p>'; });
+}
+
+// 点击房间列表中的“可加入”按钮加入房间
+if (roomListEl) {
+  roomListEl.addEventListener('click', e => {
+    const btn = e.target.closest('button[data-room]');
+    if (!btn) return;
+    const roomId = btn.getAttribute('data-room');
+    joinRoomById(roomId);
+  });
+}
+
+function joinRoomById(roomId) {
+  username = (usernameInput.value || '').trim();
+  if (!username) {
+    alert('请先输入用户名');
+    return;
+  }
+  fetch(`${ROOMS_API}/${roomId}/join`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username })
+  })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
+    .then(data => enterRoom(data))
+    .catch(err => alert('加入房间失败: ' + (err.message || err)));
 }
 
 document.getElementById('btnFlip').addEventListener('click', () => {
@@ -101,10 +133,22 @@ function updateStatus() {
     updateCaptured([], []);
     return;
   }
-  const aRole = gameState.aCamp === 'RED' ? 'A方(红)' : (gameState.aCamp === 'BLACK' ? 'A方(黑)' : 'A方');
-  const bRole = gameState.bCamp === 'RED' ? 'B方(红)' : (gameState.bCamp === 'BLACK' ? 'B方(黑)' : 'B方');
+  const aCamp = gameState.aCamp;
+  const bCamp = gameState.bCamp;
+  const aRoleText = aCamp === 'RED' ? 'A方(红)' : (aCamp === 'BLACK' ? 'A方(黑)' : 'A方');
+  const bRoleText = bCamp === 'RED' ? 'B方(红)' : (bCamp === 'BLACK' ? 'B方(黑)' : 'B方');
+  const aHtml = aCamp === 'RED'
+    ? `<span class="role-red">${aRoleText}</span>`
+    : aCamp === 'BLACK'
+      ? `<span class="role-black">${aRoleText}</span>`
+      : aRoleText;
+  const bHtml = bCamp === 'RED'
+    ? `<span class="role-red">${bRoleText}</span>`
+    : bCamp === 'BLACK'
+      ? `<span class="role-black">${bRoleText}</span>`
+      : bRoleText;
   statusEl.innerHTML =
-    `房间: ${(gameId || '').slice(0, 8)} | ${aRole} vs ${bRole} | 当前回合: ${gameState.currentSide}` +
+    `房间: ${(gameId || '').slice(0, 8)} | ${aHtml} vs ${bHtml} | 当前回合: ${gameState.currentSide}` +
     ` | 我方: ${mySide || '未加入'} | 结果: ${gameState.result}`;
   const red = [];
   const black = [];
@@ -147,6 +191,16 @@ function startPolling() {
         // 轮询失败暂时忽略，不打断游戏
       });
   }, 2000);
+}
+
+// 房间列表实时刷新（只在未进入房间时）
+function startRoomPolling() {
+  if (roomPollTimer) clearInterval(roomPollTimer);
+  roomPollTimer = setInterval(() => {
+    if (!gameId) {
+      refreshRoomList();
+    }
+  }, 3000);
 }
 
 function findPieceAt(r, c) {
@@ -322,5 +376,22 @@ function sendMove(moverId, from, to, capture, capturedId) {
     .catch(err => alert('走子失败: ' + err));
 }
 
+// 退出房间：清理状态并显示房间列表
+if (btnLeave) {
+  btnLeave.addEventListener('click', () => {
+    gameId = null;
+    gameState = null;
+    mySide = null;
+    selectedPieceId = null;
+    selectedPos = null;
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    updateStatus();
+    boardEl.innerHTML = '';
+    if (roomPanel) roomPanel.style.display = 'block';
+    refreshRoomList();
+  });
+}
+
 refreshRoomList();
+startRoomPolling();
 

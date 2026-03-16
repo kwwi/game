@@ -362,7 +362,14 @@ public final class GameEngine {
         if (attacker.camp == defender.camp) return false;
         if (attacker.pos == null || defender.pos == null) return false;
         if (!attacker.pos.isAdjacent4(defender.pos)) return false;
-        if (attacker.type == PieceType.MOUSE && defender.type == PieceType.WHALE) return true;
+        // 鼠可以吃 鲸、凤、龙、象
+        if (attacker.type == PieceType.MOUSE &&
+                (defender.type == PieceType.WHALE
+                        || defender.type == PieceType.PHOENIX
+                        || defender.type == PieceType.DRAGON
+                        || defender.type == PieceType.ELEPHANT)) {
+            return true;
+        }
         return attacker.type.rank > defender.type.rank;
     }
 
