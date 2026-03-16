@@ -150,9 +150,10 @@ function renderBoard() {
       if (piece) {
         if (piece.faceDown) {
           cell.textContent = '？';
+          cell.classList.add('face-down');
         } else {
-          const campStr = piece.camp === 'RED' ? '红' : '黑';
-          cell.textContent = campStr + toZh(piece.type);
+          cell.textContent = toZh(piece.type);
+          cell.classList.add(piece.camp === 'RED' ? 'piece-red' : 'piece-black');
         }
         if (selectedPieceId != null && selectedPos &&
             selectedPieceId === piece.id &&

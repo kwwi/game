@@ -193,21 +193,23 @@ public class GameActivity extends AppCompatActivity {
                         r == selectedRow && c == selectedCol);
 
                 if (isSelected) {
-                    cell.setBackgroundColor(0xFF888800);
+                    cell.setBackgroundColor(0xFF6B8E6B);
                 } else if (isSpecial) {
-                    cell.setBackgroundColor(0xFF555555);
+                    cell.setBackgroundColor(0xFF4a5560);
                 } else {
-                    cell.setBackgroundColor(0xFF222222);
+                    cell.setBackgroundColor(0xFF2d4a3d);
                 }
 
                 Piece piece = game.getPieceAt(r, c);
                 if (piece == null) {
                     cell.setText("");
+                    cell.setTextColor(0xFF8a9a8e);
                 } else if (piece.faceDown) {
                     cell.setText("？");
+                    cell.setTextColor(0xFF6a7a6e);
                 } else {
-                    String campStr = (piece.camp == Camp.RED) ? "红" : "黑";
-                    cell.setText(campStr + piece.type.zh);
+                    cell.setText(piece.type.zh);
+                    cell.setTextColor(piece.camp == Camp.RED ? 0xFFe53935 : 0xFF1a1a1a);
                 }
             }
         }
