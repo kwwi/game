@@ -16,26 +16,11 @@ public class GameController {
         this.service = service;
     }
 
-    @PostMapping
-    public ResponseEntity<GameService.GameCreatedResponse> createGame(
-            @RequestBody GameService.CreateGameRequest req) {
-        return ResponseEntity.ok(service.createGame(req));
-    }
-
     @GetMapping("{id}")
     public ResponseEntity<GameState> getState(@PathVariable String id) {
         GameState state = service.getState(id);
         if (state == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(state);
-    }
-
-    @PostMapping("{id}/join")
-    public ResponseEntity<GameService.GameCreatedResponse> joinGame(
-            @PathVariable String id,
-            @RequestBody GameService.JoinGameRequest req) {
-        GameService.GameCreatedResponse resp = service.joinGame(id, req);
-        if (resp == null) return ResponseEntity.notFound().build();
-        return ResponseEntity.ok(resp);
     }
 
     @PostMapping("{id}/flip")

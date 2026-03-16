@@ -1,4 +1,5 @@
 const API_BASE = 'http://localhost:8080/api/games';
+const ROOMS_API = 'http://localhost:8080/api/rooms';
 
 let gameId = null;
 let gameState = null;
@@ -13,30 +14,33 @@ const boardEl = document.getElementById('board');
 const usernameInput = document.getElementById('username');
 const gameIdInput = document.getElementById('gameIdInput');
 
-document.getElementById('btnNew').addEventListener('click', () => {
+function enterRoom(data) {
+  gameId = data.gameId;
+  gameIdInput.value = gameId;
+  gameState = data.state;
+  mySide = data.side;
+  selectedPieceId = null;
+  selectedPos = null;
+  updateStatus();
+  renderBoard();
+  startPolling();
+  refreshRoomList();
+}
+
+document.getElementById('btnQuickJoin').addEventListener('click', () => {
   username = (usernameInput.value || '').trim();
   if (!username) {
     alert('请先输入用户名');
     return;
   }
-  fetch(API_BASE, {
+  fetch(`${ROOMS_API}/quick-join`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username })
   })
-    .then(r => r.json())
-    .then(data => {
-      gameId = data.gameId;
-      gameIdInput.value = gameId;
-      gameState = data.state;
-      mySide = data.side;
-      selectedPieceId = null;
-      selectedPos = null;
-      updateStatus();
-      renderBoard();
-      startPolling();
-    })
-    .catch(err => alert('创建对局失败: ' + err));
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('无空位')))
+    .then(data => enterRoom(data))
+    .catch(err => alert('快速加入失败: ' + (err.message || err)));
 });
 
 document.getElementById('btnJoin').addEventListener('click', () => {
@@ -47,28 +51,45 @@ document.getElementById('btnJoin').addEventListener('click', () => {
   }
   const gid = (gameIdInput.value || '').trim();
   if (!gid) {
-    alert('请输入要加入的对局ID');
+    alert('请输入房间ID');
     return;
   }
-  fetch(`${API_BASE}/${gid}/join`, {
+  fetch(`${ROOMS_API}/${gid}/join`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username })
   })
-    .then(r => r.json())
-    .then(data => {
-      gameId = data.gameId;
-      gameIdInput.value = gameId;
-      gameState = data.state;
-      mySide = data.side;
-      selectedPieceId = null;
-      selectedPos = null;
-      updateStatus();
-      renderBoard();
-      startPolling();
-    })
-    .catch(err => alert('加入对局失败: ' + err));
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
+    .then(data => enterRoom(data))
+    .catch(err => alert('加入房间失败: ' + (err.message || err)));
 });
+
+document.getElementById('btnRefreshRooms').addEventListener('click', refreshRoomList);
+
+function refreshRoomList() {
+  fetch(ROOMS_API)
+    .then(r => r.json())
+    .then(rooms => {
+      const el = document.getElementById('roomList');
+      if (!el) return;
+      if (!rooms.length) {
+        el.innerHTML = '<p>暂无房间</p>';
+        return;
+      }
+      let html = '<table class="room-table"><thead><tr><th>房间ID</th><th>玩家A</th><th>玩家B</th><th>状态</th></tr></thead><tbody>';
+      rooms.forEach(r => {
+        const shortId = r.roomId ? r.roomId.slice(0, 8) : '';
+        const a = (r.playerA || '—') + (r.roleA ? '<span class="role-' + (r.roleA === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
+        const b = (r.playerB || '—') + (r.roleB ? '<span class="role-' + (r.roleB === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
+        const status = r.full ? '已满' : '可加入';
+        const rowClass = r.full ? ' class="full"' : '';
+        html += '<tr' + rowClass + '><td>' + shortId + '</td><td>' + a + '</td><td>' + b + '</td><td>' + status + '</td></tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    })
+    .catch(() => { const el = document.getElementById('roomList'); if (el) el.innerHTML = '<p>加载失败</p>'; });
+}
 
 document.getElementById('btnFlip').addEventListener('click', () => {
   alert('现在翻牌由轮到操作的玩家点击未翻面的棋子来完成。');
@@ -80,8 +101,10 @@ function updateStatus() {
     updateCaptured([], []);
     return;
   }
-  statusEl.textContent =
-    `对局: ${gameId} | 当前回合: ${gameState.currentSide}` +
+  const aRole = gameState.aCamp === 'RED' ? 'A方(红)' : (gameState.aCamp === 'BLACK' ? 'A方(黑)' : 'A方');
+  const bRole = gameState.bCamp === 'RED' ? 'B方(红)' : (gameState.bCamp === 'BLACK' ? 'B方(黑)' : 'B方');
+  statusEl.innerHTML =
+    `房间: ${(gameId || '').slice(0, 8)} | ${aRole} vs ${bRole} | 当前回合: ${gameState.currentSide}` +
     ` | 我方: ${mySide || '未加入'} | 结果: ${gameState.result}`;
   const red = [];
   const black = [];
@@ -298,4 +321,6 @@ function sendMove(moverId, from, to, capture, capturedId) {
     })
     .catch(err => alert('走子失败: ' + err));
 }
+
+refreshRoomList();
 

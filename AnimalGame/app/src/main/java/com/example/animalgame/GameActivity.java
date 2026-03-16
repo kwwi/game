@@ -178,10 +178,13 @@ public class GameActivity extends AppCompatActivity {
     }
 
     private void refreshBoard() {
+        Camp aCamp = game.getCampOf(Side.A);
+        Camp bCamp = game.getCampOf(Side.B);
+        String aRole = aCamp == Camp.RED ? "A方(红)" : (aCamp == Camp.BLACK ? "A方(黑)" : "A方");
+        String bRole = bCamp == Camp.RED ? "B方(红)" : (bCamp == Camp.BLACK ? "B方(黑)" : "B方");
         tvStatus.setText(
-                "当前回合: " + game.getCurrentSide() +
-                        " 阵营: " + game.getCampOf(game.getCurrentSide()) +
-                        " 结果: " + game.getResult()
+                aRole + " vs " + bRole + " | 当前回合: " + game.getCurrentSide() +
+                        " | 结果: " + game.getResult()
         );
 
         for (int r = 1; r <= GameEngine.ROWS; r++) {
