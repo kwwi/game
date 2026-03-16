@@ -27,6 +27,8 @@ public class GameActivity extends AppCompatActivity {
     private Integer selectedPieceId = null;
     private int selectedRow = -1;
     private int selectedCol = -1;
+    // 默认本机玩家视角为 A 方，如需切换可改为 Side.B
+    private Side mySide = Side.A;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -100,6 +102,8 @@ public class GameActivity extends AppCompatActivity {
 
     private void onCellClicked(int r, int c) {
         if (game.isGameOver()) return;
+        // 非自己回合时，不响应点击
+        if (game.getCurrentSide() != mySide) return;
 
         Piece piece = game.getPieceAt(r, c);
         Camp currentCamp = game.getCampOf(game.getCurrentSide());
@@ -186,6 +190,11 @@ public class GameActivity extends AppCompatActivity {
                 aRole + " vs " + bRole + " | 当前回合: " + game.getCurrentSide() +
                         " | 结果: " + game.getResult()
         );
+
+        // 非自己回合时棋盘半透明
+        if (gridBoard != null) {
+            gridBoard.setAlpha(game.getCurrentSide() == mySide ? 1.0f : 0.5f);
+        }
 
         for (int r = 1; r <= GameEngine.ROWS; r++) {
             for (int c = 1; c <= GameEngine.COLS; c++) {

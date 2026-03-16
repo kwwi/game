@@ -9,6 +9,7 @@ let username = '';
 let mySide = null; // 'A' or 'B'
 let pollTimer = null;
 let roomPollTimer = null;
+let tipTimer = null;
 
 const statusEl = document.getElementById('status');
 const boardEl = document.getElementById('board');
@@ -17,6 +18,7 @@ const gameIdInput = document.getElementById('gameIdInput');
 const roomPanel = document.getElementById('roomPanel');
 const roomListEl = document.getElementById('roomList');
 const btnLeave = document.getElementById('btnLeave');
+const tipEl = document.getElementById('tip');
 
 function enterRoom(data) {
   gameId = data.gameId;
@@ -34,7 +36,7 @@ function enterRoom(data) {
 document.getElementById('btnQuickJoin').addEventListener('click', () => {
   username = (usernameInput.value || '').trim();
   if (!username) {
-    alert('请先输入用户名');
+    showTip('请先输入用户名');
     return;
   }
   fetch(`${ROOMS_API}/quick-join`, {
@@ -44,18 +46,18 @@ document.getElementById('btnQuickJoin').addEventListener('click', () => {
   })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('无空位')))
     .then(data => enterRoom(data))
-    .catch(err => alert('快速加入失败: ' + (err.message || err)));
+    .catch(err => showTip('快速加入失败: ' + (err.message || err)));
 });
 
 document.getElementById('btnJoin').addEventListener('click', () => {
   username = (usernameInput.value || '').trim();
   if (!username) {
-    alert('请先输入用户名');
+    showTip('请先输入用户名');
     return;
   }
   const gid = (gameIdInput.value || '').trim();
   if (!gid) {
-    alert('请输入房间ID');
+    showTip('请输入房间ID');
     return;
   }
   fetch(`${ROOMS_API}/${gid}/join`, {
@@ -65,7 +67,7 @@ document.getElementById('btnJoin').addEventListener('click', () => {
   })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
     .then(data => enterRoom(data))
-    .catch(err => alert('加入房间失败: ' + (err.message || err)));
+    .catch(err => showTip('加入房间失败: ' + (err.message || err)));
 });
 
 document.getElementById('btnRefreshRooms').addEventListener('click', refreshRoomList);
@@ -124,8 +126,18 @@ function joinRoomById(roomId) {
 }
 
 document.getElementById('btnFlip').addEventListener('click', () => {
-  alert('现在翻牌由轮到操作的玩家点击未翻面的棋子来完成。');
+  showTip('现在翻牌由轮到操作的玩家点击未翻面的棋子来完成。');
 });
+
+function showTip(msg) {
+  if (!tipEl) return;
+  tipEl.textContent = msg;
+  tipEl.style.display = 'block';
+  if (tipTimer) clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => {
+    tipEl.style.display = 'none';
+  }, 2000);
+}
 
 function updateStatus() {
   if (!gameState) {
@@ -186,6 +198,7 @@ function startPolling() {
         }
         updateStatus();
         renderBoard();
+        updateBoardInteractivity();
       })
       .catch(() => {
         // 轮询失败暂时忽略，不打断游戏
@@ -244,6 +257,7 @@ function renderBoard() {
       boardEl.appendChild(cell);
     }
   }
+  updateBoardInteractivity();
 }
 
 function isSpecialCell(r, c) {
@@ -273,12 +287,12 @@ function onCellClicked(r, c) {
   if (!gameId || !gameState) return;
 
   if (!username || !mySide) {
-    alert('请先输入用户名并新建/加入对局');
+    showTip('请先输入用户名并新建/加入对局');
     return;
   }
 
   if (gameState.currentSide !== mySide) {
-    alert('当前不是你的回合');
+    showTip('当前不是你的回合');
     return;
   }
 
@@ -302,12 +316,12 @@ function onCellClicked(r, c) {
           updateStatus();
           renderBoard();
         })
-        .catch(err => alert('翻牌失败: ' + err));
+        .catch(err => showTip('翻牌失败'));
       return;
     }
     // 这里只允许选中当前阵营的棋子
     if (!isCurrentCampPiece(piece)) {
-      alert('不是当前阵营的棋子');
+      showTip('不是当前阵营的棋子');
       return;
     }
     selectedPieceId = piece.id;
@@ -333,7 +347,7 @@ function onCellClicked(r, c) {
 
   // 未翻面棋子会阻挡移动，且不可被吃
   if (piece && piece.faceDown) {
-    alert('未翻面棋子会阻挡移动，且不可被吃');
+    showTip('未翻面棋子会阻挡移动，且不可被吃');
     return;
   }
 
@@ -373,7 +387,7 @@ function sendMove(moverId, from, to, capture, capturedId) {
       updateStatus();
       renderBoard();
     })
-    .catch(err => alert('走子失败: ' + err));
+    .catch(() => showTip('走子失败'));
 }
 
 // 退出房间：清理状态并显示房间列表
@@ -394,4 +408,17 @@ if (btnLeave) {
 
 refreshRoomList();
 startRoomPolling();
+
+function updateBoardInteractivity() {
+  if (!boardEl) return;
+  if (!gameId || !gameState || !mySide) {
+    boardEl.classList.remove('board-disabled');
+    return;
+  }
+  if (gameState.currentSide !== mySide) {
+    boardEl.classList.add('board-disabled');
+  } else {
+    boardEl.classList.remove('board-disabled');
+  }
+}
 

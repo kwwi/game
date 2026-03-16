@@ -25,6 +25,20 @@
         .room-table tr.full { opacity: 0.7; }
         .role-red { color: #e53935; }
         .role-black { color: #1a1a1a; }
+        .board-disabled .cell { cursor: not-allowed; opacity: 0.85; }
+        #tip {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 13px;
+            display: none;
+            z-index: 9999;
+        }
     </style>
 </head>
 <body>
@@ -56,6 +70,7 @@
         <div>黑方被吃：<span id="capturedBlack"></span></div>
     </div>
     <div id="board"></div>
+    <div id="tip"></div>
 
     <script src="main.js"></script>
 </body>
