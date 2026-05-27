@@ -5,6 +5,8 @@ let gameId = null;
 let gameState = null;
 let selectedPieceId = null;
 let selectedPos = null; // {r,c}
+let selectedPieceType = null;
+let selectedPieceCamp = null;
 let username = '';
 let mySide = null; // 'A' or 'B'
 let pollTimer = null;
@@ -19,6 +21,53 @@ const roomPanel = document.getElementById('roomPanel');
 const roomListEl = document.getElementById('roomList');
 const btnLeave = document.getElementById('btnLeave');
 const tipEl = document.getElementById('tip');
+const pieceGhostEl = document.getElementById('pieceGhost');
+
+const TYPE_RANK = { WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7, LEOPARD: 6, FORTUNE: 5, WOLF: 4, DOG: 3, CAT: 2, MOUSE: 1 };
+const BOARD_GAP_PX = 4;
+const BOARD_COLS_DEFAULT = 8;
+const BOARD_ROWS_DEFAULT = 7;
+
+function layoutBoardGrid() {
+  const stage = document.querySelector('.board-stage');
+  if (!stage || !boardEl) return;
+  const frame = boardEl.closest('.board-frame');
+  const cols = gameState ? (gameState.cols || BOARD_COLS_DEFAULT) : BOARD_COLS_DEFAULT;
+  const rows = gameState ? (gameState.rows || BOARD_ROWS_DEFAULT) : BOARD_ROWS_DEFAULT;
+  const pad = 8;
+  const maxW = stage.clientWidth - pad * 2;
+  const capEl = frame && frame.querySelector('.captured-panel');
+  const capturedReserve = Math.max(64, (capEl && capEl.offsetHeight > 0 ? capEl.offsetHeight : 0) + 20);
+  const framePadY = 36;
+  const maxH = Math.max(120, stage.clientHeight - framePadY - capturedReserve);
+  const gap = BOARD_GAP_PX;
+  const raw = Math.min(
+    (maxW - gap * (cols - 1)) / cols,
+    (maxH - gap * (rows - 1)) / rows
+  );
+  let cell = Number.isFinite(raw) ? Math.floor(raw) : 40;
+  cell = Math.min(88, Math.max(14, cell));
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
+  boardEl.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
+  boardEl.style.gap = `${gap}px`;
+  boardEl.style.width = `${cols * cell + (cols - 1) * gap}px`;
+  boardEl.style.height = `${rows * cell + (rows - 1) * gap}px`;
+  boardEl.style.setProperty('--cell', `${cell}px`);
+  const fs = Math.max(10, Math.min(20, Math.floor(cell * 0.38)));
+  boardEl.style.fontSize = `${fs}px`;
+  if (pieceGhostEl) {
+    pieceGhostEl.style.fontSize = `${Math.min(22, fs + 4)}px`;
+  }
+}
+
+let layoutBoardTimer = null;
+function scheduleLayoutBoardGrid() {
+  if (layoutBoardTimer) cancelAnimationFrame(layoutBoardTimer);
+  layoutBoardTimer = requestAnimationFrame(() => {
+    layoutBoardTimer = null;
+    layoutBoardGrid();
+  });
+}
 
 function enterRoom(data) {
   gameId = data.gameId;
@@ -195,6 +244,8 @@ function startPolling() {
         if (!prevTurn || prevTurn !== state.currentSide || prevResult !== state.result) {
           selectedPieceId = null;
           selectedPos = null;
+          selectedPieceType = null;
+          selectedPieceCamp = null;
         }
         updateStatus();
         renderBoard();
@@ -258,6 +309,8 @@ function renderBoard() {
     }
   }
   updateBoardInteractivity();
+  updatePieceGhost();
+  scheduleLayoutBoardGrid();
 }
 
 function isSpecialCell(r, c) {
@@ -326,6 +379,8 @@ function onCellClicked(r, c) {
     }
     selectedPieceId = piece.id;
     selectedPos = { r, c };
+    selectedPieceType = piece.type;
+    selectedPieceCamp = piece.camp;
     renderBoard();
     return;
   }
@@ -333,7 +388,10 @@ function onCellClicked(r, c) {
   if (selectedPos && selectedPos.r === r && selectedPos.c === c) {
     selectedPieceId = null;
     selectedPos = null;
+    selectedPieceType = null;
+    selectedPieceCamp = null;
     renderBoard();
+    updatePieceGhost();
     return;
   }
 
@@ -341,6 +399,8 @@ function onCellClicked(r, c) {
   if (piece && !piece.faceDown && isCurrentCampPiece(piece)) {
     selectedPieceId = piece.id;
     selectedPos = { r, c };
+    selectedPieceType = piece.type;
+    selectedPieceCamp = piece.camp;
     renderBoard();
     return;
   }
@@ -384,10 +444,98 @@ function sendMove(moverId, from, to, capture, capturedId) {
       gameState = state;
       selectedPieceId = null;
       selectedPos = null;
+      selectedPieceType = null;
+      selectedPieceCamp = null;
       updateStatus();
       renderBoard();
+      updatePieceGhost();
     })
     .catch(() => showTip('走子失败'));
+}
+
+function getBoardCellFromPoint(clientX, clientY) {
+  if (!boardEl || !boardEl.firstElementChild) return null;
+  const rect = boardEl.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  if (x < 0 || y < 0) return null;
+  const cs = getComputedStyle(boardEl);
+  const gap = parseFloat(cs.gap || cs.columnGap || String(BOARD_GAP_PX)) || BOARD_GAP_PX;
+  const first = boardEl.firstElementChild;
+  const cellW = first.offsetWidth;
+  const cellH = first.offsetHeight;
+  const stepX = cellW + gap;
+  const stepY = cellH + gap;
+  const cols = gameState ? (gameState.cols || BOARD_COLS_DEFAULT) : BOARD_COLS_DEFAULT;
+  const rows = gameState ? (gameState.rows || BOARD_ROWS_DEFAULT) : BOARD_ROWS_DEFAULT;
+  const c = Math.floor(x / stepX);
+  const r = Math.floor(y / stepY);
+  if (c < 0 || c >= cols || r < 0 || r >= rows) return null;
+  const xIn = x - c * stepX;
+  const yIn = y - r * stepY;
+  if (xIn >= cellW || yIn >= cellH) return null;
+  return { r: r + 1, c: c + 1 };
+}
+
+function isAdjacent(from, to) {
+  return Math.abs(from.r - to.r) + Math.abs(from.c - to.c) === 1;
+}
+
+function canCapture(attackerType, defenderType) {
+  if (attackerType === 'MOUSE' && ['WHALE', 'PHOENIX', 'DRAGON', 'ELEPHANT'].indexOf(defenderType) >= 0) return true;
+  return (TYPE_RANK[attackerType] || 0) > (TYPE_RANK[defenderType] || 0);
+}
+
+function isLegalTarget(toR, toC) {
+  if (!selectedPos || selectedPieceId == null || !gameState) return false;
+  if (selectedPos.r === toR && selectedPos.c === toC) return true;
+  if (!isAdjacent(selectedPos, { r: toR, c: toC })) return false;
+  const target = findPieceAt(toR, toC);
+  if (!target) return true;
+  if (target.faceDown) return false;
+  if (target.camp === selectedPieceCamp) return false;
+  if (isSpecialCell(toR, toC)) return false;
+  return canCapture(selectedPieceType, target.type);
+}
+
+function updatePieceGhost() {
+  if (!pieceGhostEl) return;
+  if (!selectedPieceId || !selectedPieceType) {
+    pieceGhostEl.style.display = 'none';
+    return;
+  }
+  pieceGhostEl.textContent = toZh(selectedPieceType);
+  pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'piece-red' : 'piece-black';
+}
+
+document.addEventListener('mousemove', function (e) {
+  if (selectedPieceId && selectedPieceType && pieceGhostEl) {
+    pieceGhostEl.style.display = 'block';
+    pieceGhostEl.style.left = e.clientX + 'px';
+    pieceGhostEl.style.top = e.clientY + 'px';
+    pieceGhostEl.textContent = toZh(selectedPieceType);
+    pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'piece-red' : 'piece-black';
+  } else if (pieceGhostEl) {
+    pieceGhostEl.style.display = 'none';
+  }
+});
+
+if (boardEl) {
+  boardEl.addEventListener('mousemove', function (e) {
+    if (!selectedPieceId || !gameState || gameState.currentSide !== mySide) {
+      boardEl.style.cursor = '';
+      return;
+    }
+    const cell = getBoardCellFromPoint(e.clientX, e.clientY);
+    if (!cell) {
+      boardEl.style.cursor = '';
+      return;
+    }
+    boardEl.style.cursor = isLegalTarget(cell.r, cell.c) ? 'pointer' : 'not-allowed';
+  });
+  boardEl.addEventListener('mouseleave', function () {
+    boardEl.style.cursor = '';
+  });
 }
 
 // 退出房间：清理状态并显示房间列表
@@ -401,13 +549,24 @@ if (btnLeave) {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
     updateStatus();
     boardEl.innerHTML = '';
+    scheduleLayoutBoardGrid();
     if (roomPanel) roomPanel.style.display = 'block';
     refreshRoomList();
   });
 }
 
+window.addEventListener('resize', scheduleLayoutBoardGrid);
+window.addEventListener('load', scheduleLayoutBoardGrid);
+if (typeof ResizeObserver !== 'undefined') {
+  const stageEl = document.querySelector('.board-stage');
+  if (stageEl) {
+    new ResizeObserver(() => scheduleLayoutBoardGrid()).observe(stageEl);
+  }
+}
+
 refreshRoomList();
 startRoomPolling();
+scheduleLayoutBoardGrid();
 
 function updateBoardInteractivity() {
   if (!boardEl) return;
