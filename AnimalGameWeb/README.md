@@ -15,10 +15,10 @@
 cd AnimalGameWeb/backend
 ```
 
-2. 使用 Gradle 启动 Spring Boot 应用（第一次运行会自动下载依赖）：
+2. 使用 Maven 启动 Spring Boot 应用（第一次运行会自动下载依赖）：
 
 ```bash
-./gradlew bootRun
+./mvnw spring-boot:run
 ```
 
 3. 启动成功后，后端服务运行在：
