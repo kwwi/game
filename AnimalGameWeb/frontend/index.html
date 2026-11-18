@@ -8,59 +8,78 @@
 </head>
 <body>
     <div class="app">
-        <header class="app-controls">
-            <div class="brand-row">
-                <div>
+        <!-- 大厅 -->
+        <section id="viewLobby" class="view view-lobby">
+            <header class="lobby-hero">
+                <div class="brand-block">
                     <h1>动物棋</h1>
                     <p class="brand-sub">翻开 · 对峙 · 以弱胜强</p>
                 </div>
-                <div class="top-actions">
-                    <button type="button" id="btnMute" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
-                    <button type="button" id="btnToggleRooms" class="ghost">房间</button>
+                <button type="button" id="btnMuteLobby" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
+            </header>
+
+            <div class="lobby-card">
+                <div class="lobby-user">
+                    <label>用户名
+                        <input id="username" type="text" placeholder="请输入用户名" autocomplete="nickname" />
+                    </label>
                 </div>
-            </div>
-            <div class="controls-row">
-                <div class="panel inline">
-                    <label>用户名：<input id="username" type="text" placeholder="请输入用户名" autocomplete="nickname" /></label>
-                </div>
-                <div class="panel inline">
+                <div class="lobby-actions">
                     <button id="btnQuickJoin" type="button">快速加入</button>
-                    <button id="btnFlip" type="button" class="ghost">翻牌说明</button>
+                    <button id="btnSolo" type="button" class="accent">自己对弈</button>
                 </div>
-                <div class="panel inline">
-                    <label>房间ID：<input id="gameIdInput" type="text" placeholder="输入房间ID加入" /></label>
-                    <button id="btnJoin" type="button">加入房间</button>
+                <div class="lobby-join-id">
+                    <label>房间ID
+                        <input id="gameIdInput" type="text" placeholder="输入房间ID加入或观战" />
+                    </label>
+                    <button id="btnJoin" type="button">加入对局</button>
+                    <button id="btnSpectateId" type="button" class="ghost">观战</button>
                 </div>
             </div>
-            <div class="panel" id="roomPanel">
+
+            <div class="lobby-rooms">
                 <div class="room-head">
-                    <strong>房间列表</strong>
+                    <h2>对局大厅</h2>
                     <button id="btnRefreshRooms" type="button" class="ghost">刷新</button>
                 </div>
-                <div class="room-body">
-                    <div id="roomList"></div>
-                </div>
+                <div id="roomList"></div>
             </div>
-            <div class="status-bar">
-                <span id="status">未连接</span>
-                <button id="btnLeave" type="button" class="ghost">退出房间</button>
-            </div>
-        </header>
-        <main class="board-stage">
-            <div class="board-frame">
-                <div id="board" aria-label="棋盘"></div>
-                <div class="captured-panel">
-                    <div class="captured-group">
-                        <div>红方被吃</div>
-                        <div id="capturedRed" class="captured-icons"><span class="empty">无</span></div>
+        </section>
+
+        <!-- 对局 -->
+        <section id="viewGame" class="view view-game hidden">
+            <header class="app-controls game-header">
+                <div class="brand-row">
+                    <div>
+                        <h1>动物棋</h1>
+                        <p class="brand-sub" id="gameModeLabel">对局中</p>
                     </div>
-                    <div class="captured-group">
-                        <div>黑方被吃</div>
-                        <div id="capturedBlack" class="captured-icons"><span class="empty">无</span></div>
+                    <div class="top-actions">
+                        <button type="button" id="btnMute" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
+                        <button type="button" id="btnFlip" class="ghost">规则</button>
+                        <button type="button" id="btnLeave" class="ghost">返回大厅</button>
                     </div>
                 </div>
-            </div>
-        </main>
+                <div class="status-bar">
+                    <span id="status">未连接</span>
+                </div>
+            </header>
+            <main class="board-stage">
+                <div class="board-frame">
+                    <div id="board" aria-label="棋盘"></div>
+                    <div class="captured-panel">
+                        <div class="captured-group">
+                            <div>红方被吃</div>
+                            <div id="capturedRed" class="captured-icons"><span class="empty">无</span></div>
+                        </div>
+                        <div class="captured-group">
+                            <div>黑方被吃</div>
+                            <div id="capturedBlack" class="captured-icons"><span class="empty">无</span></div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </section>
     </div>
     <div id="pieceGhost" aria-hidden="true"></div>
     <div id="tip" role="status"></div>

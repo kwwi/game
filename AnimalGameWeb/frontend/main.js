@@ -27,6 +27,8 @@ let selectedPieceType = null;
 let selectedPieceCamp = null;
 let username = '';
 let mySide = null;
+let myRole = null; // PLAYER | SPECTATOR
+let isSolo = false;
 let pollTimer = null;
 let roomPollTimer = null;
 let tipTimer = null;
@@ -46,13 +48,16 @@ const statusEl = document.getElementById('status');
 const boardEl = document.getElementById('board');
 const usernameInput = document.getElementById('username');
 const gameIdInput = document.getElementById('gameIdInput');
-const roomPanel = document.getElementById('roomPanel');
 const roomListEl = document.getElementById('roomList');
 const btnLeave = document.getElementById('btnLeave');
 const tipEl = document.getElementById('tip');
 const pieceGhostEl = document.getElementById('pieceGhost');
 const resultBannerEl = document.getElementById('resultBanner');
 const btnMute = document.getElementById('btnMute');
+const btnMuteLobby = document.getElementById('btnMuteLobby');
+const viewLobby = document.getElementById('viewLobby');
+const viewGame = document.getElementById('viewGame');
+const gameModeLabel = document.getElementById('gameModeLabel');
 
 const TYPE_RANK = {
   WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7,
@@ -73,22 +78,62 @@ const audio = window.AnimalAudio || {
 };
 
 function syncMuteButton() {
-  if (!btnMute) return;
   const muted = audio.isMuted();
-  btnMute.textContent = muted ? '🔇' : '🔊';
-  btnMute.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  const label = muted ? '🔇' : '🔊';
+  [btnMute, btnMuteLobby].forEach(btn => {
+    if (!btn) return;
+    btn.textContent = label;
+    btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
+  });
 }
 
-if (btnMute) {
-  syncMuteButton();
-  btnMute.addEventListener('click', () => {
+function wireMute(btn) {
+  if (!btn) return;
+  btn.addEventListener('click', () => {
     audio.unlock();
     audio.toggleMuted();
     syncMuteButton();
   });
 }
 
+syncMuteButton();
+wireMute(btnMute);
+wireMute(btnMuteLobby);
+
 document.addEventListener('pointerdown', () => audio.unlock(), { once: false, passive: true });
+
+function showLobby() {
+  if (viewLobby) viewLobby.classList.remove('hidden');
+  if (viewGame) viewGame.classList.add('hidden');
+  refreshRoomList();
+  startRoomPolling();
+}
+
+function showGame() {
+  if (viewLobby) viewLobby.classList.add('hidden');
+  if (viewGame) viewGame.classList.remove('hidden');
+  scheduleLayoutBoardGrid();
+}
+
+function requireUsername() {
+  username = (usernameInput.value || '').trim();
+  if (!username) {
+    showTip('请先输入用户名');
+    return null;
+  }
+  return username;
+}
+
+function canControlBoard() {
+  if (!gameId || !gameState || myRole !== 'PLAYER') return false;
+  if (isSolo) return true;
+  return !!mySide && gameState.currentSide === mySide;
+}
+
+function effectiveSide() {
+  if (isSolo && gameState) return gameState.currentSide;
+  return mySide;
+}
 
 function pieceImageUrl(type) {
   const file = PIECE_FILE[type];
@@ -156,9 +201,12 @@ function scheduleLayoutBoardGrid() {
 
 function enterRoom(data) {
   gameId = data.gameId;
-  gameIdInput.value = gameId;
+  if (gameIdInput) gameIdInput.value = gameId;
   gameState = data.state;
-  mySide = data.side;
+  myRole = data.role || 'PLAYER';
+  isSolo = !!data.solo;
+  mySide = data.side || null;
+  if (isSolo && gameState) mySide = gameState.currentSide;
   selectedPieceId = null;
   selectedPos = null;
   selectedPieceType = null;
@@ -166,60 +214,73 @@ function enterRoom(data) {
   prevPiecesMap = null;
   boardBuilt = false;
   hideResultBanner();
+  if (gameModeLabel) {
+    if (myRole === 'SPECTATOR') gameModeLabel.textContent = '观战中';
+    else if (isSolo) gameModeLabel.textContent = '自己对弈';
+    else gameModeLabel.textContent = '对局中';
+  }
+  showGame();
   updateStatus();
   renderBoard({ force: true });
+  updateBoardInteractivity();
   startPolling();
-  if (roomPanel) roomPanel.classList.add('collapsed');
+  if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
   audio.unlock();
+}
+
+function postRoom(path, body) {
+  return fetch(`${ROOMS_API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  }).then(r => r.ok ? r.json() : Promise.reject(new Error('请求失败')));
 }
 
 document.getElementById('btnQuickJoin').addEventListener('click', () => {
   audio.unlock();
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    showTip('请先输入用户名');
-    return;
-  }
-  fetch(`${ROOMS_API}/quick-join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('无空位')))
+  if (!requireUsername()) return;
+  postRoom('/quick-join', { username })
     .then(data => enterRoom(data))
     .catch(err => showTip('快速加入失败: ' + (err.message || err)));
 });
 
+const btnSolo = document.getElementById('btnSolo');
+if (btnSolo) {
+  btnSolo.addEventListener('click', () => {
+    audio.unlock();
+    if (!requireUsername()) return;
+    postRoom('/solo', { username })
+      .then(data => enterRoom(data))
+      .catch(err => showTip('自弈开局失败: ' + (err.message || err)));
+  });
+}
+
 document.getElementById('btnJoin').addEventListener('click', () => {
   audio.unlock();
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    showTip('请先输入用户名');
-    return;
-  }
+  if (!requireUsername()) return;
   const gid = (gameIdInput.value || '').trim();
   if (!gid) {
     showTip('请输入房间ID');
     return;
   }
-  fetch(`${ROOMS_API}/${gid}/join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
-    .then(data => enterRoom(data))
-    .catch(err => showTip('加入房间失败: ' + (err.message || err)));
+  joinRoomById(gid);
 });
 
-document.getElementById('btnRefreshRooms').addEventListener('click', refreshRoomList);
-
-const btnToggleRooms = document.getElementById('btnToggleRooms');
-if (btnToggleRooms && roomPanel) {
-  btnToggleRooms.addEventListener('click', () => {
-    roomPanel.classList.toggle('collapsed');
+const btnSpectateId = document.getElementById('btnSpectateId');
+if (btnSpectateId) {
+  btnSpectateId.addEventListener('click', () => {
+    audio.unlock();
+    if (!requireUsername()) return;
+    const gid = (gameIdInput.value || '').trim();
+    if (!gid) {
+      showTip('请输入房间ID');
+      return;
+    }
+    spectateRoomById(gid);
   });
 }
+
+document.getElementById('btnRefreshRooms').addEventListener('click', refreshRoomList);
 
 function refreshRoomList() {
   fetch(ROOMS_API)
@@ -231,16 +292,26 @@ function refreshRoomList() {
         el.innerHTML = '<p>暂无房间</p>';
         return;
       }
-      let html = '<table class="room-table"><thead><tr><th>房间ID</th><th>玩家A</th><th>玩家B</th><th>状态</th></tr></thead><tbody>';
+      let html = '<table class="room-table"><thead><tr><th>房间</th><th>玩家A</th><th>玩家B</th><th>观战</th><th>操作</th></tr></thead><tbody>';
       rooms.forEach(r => {
         const shortId = r.roomId ? r.roomId.slice(0, 8) : '';
         const a = (r.playerA || '—') + (r.roleA ? '<span class="role-' + (r.roleA === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
         const b = (r.playerB || '—') + (r.roleB ? '<span class="role-' + (r.roleB === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
-        const statusCell = r.full
-          ? '已满'
-          : `<button type="button" data-room="${r.roomId}">可加入</button>`;
-        const rowClass = r.full ? ' class="full"' : '';
-        html += '<tr' + rowClass + '><td>' + shortId + '</td><td>' + a + '</td><td>' + b + '</td><td>' + statusCell + '</td></tr>';
+        const badges = (r.solo ? '<span class="room-badge solo">自弈</span>' : '') +
+          (r.full ? '<span class="room-badge">满员</span>' : '');
+        let actions = '<div class="room-actions">';
+        if (!r.full && !r.solo) {
+          actions += `<button type="button" data-join="${r.roomId}">加入</button>`;
+        }
+        if (r.hasGame) {
+          actions += `<button type="button" class="ghost" data-spectate="${r.roomId}">观战</button>`;
+        }
+        if (r.full && !r.hasGame) actions += '—';
+        if (!r.hasGame && !r.playerA) actions += `<button type="button" data-join="${r.roomId}">进入空房</button>`;
+        actions += '</div>';
+        const rowClass = r.full && !r.solo ? ' class="full"' : '';
+        html += '<tr' + rowClass + '><td>' + shortId + badges + '</td><td>' + a + '</td><td>' + b +
+          '</td><td>' + (r.spectatorCount || 0) + '</td><td>' + actions + '</td></tr>';
       });
       html += '</tbody></table>';
       el.innerHTML = html;
@@ -250,31 +321,36 @@ function refreshRoomList() {
 
 if (roomListEl) {
   roomListEl.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-room]');
-    if (!btn) return;
-    joinRoomById(btn.getAttribute('data-room'));
+    const joinBtn = e.target.closest('button[data-join]');
+    if (joinBtn) {
+      joinRoomById(joinBtn.getAttribute('data-join'));
+      return;
+    }
+    const specBtn = e.target.closest('button[data-spectate]');
+    if (specBtn) {
+      spectateRoomById(specBtn.getAttribute('data-spectate'));
+    }
   });
 }
 
 function joinRoomById(roomId) {
   audio.unlock();
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    showTip('请先输入用户名');
-    return;
-  }
-  fetch(`${ROOMS_API}/${roomId}/join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
+  if (!requireUsername()) return;
+  postRoom(`/${roomId}/join`, { username })
     .then(data => enterRoom(data))
     .catch(err => showTip('加入房间失败: ' + (err.message || err)));
 }
 
+function spectateRoomById(roomId) {
+  audio.unlock();
+  if (!requireUsername()) return;
+  postRoom(`/${roomId}/spectate`, { username })
+    .then(data => enterRoom(data))
+    .catch(err => showTip('观战失败: 房间不存在或尚未开局'));
+}
+
 document.getElementById('btnFlip').addEventListener('click', () => {
-  showTip('现在翻牌由轮到操作的玩家点击未翻面的棋子来完成。');
+  showTip('轮到你时点击未翻面的棋子翻开；先选己方明棋，再点相邻格走子或吃子。自弈可操作双方。');
 });
 
 function showTip(msg) {
@@ -322,9 +398,15 @@ function updateStatus(opts) {
     : bCamp === 'BLACK'
       ? `<span class="role-black">${bRoleText}</span>`
       : bRoleText;
+  const roleText = myRole === 'SPECTATOR'
+    ? '观战'
+    : (isSolo ? '自弈' : (`我方: ${mySide || '—'}`));
   statusEl.innerHTML =
     `房间: ${(gameId || '').slice(0, 8)} | ${aHtml} vs ${bHtml} | 当前回合: ${gameState.currentSide}` +
-    ` | 我方: ${mySide || '未加入'} | 结果: ${gameState.result}`;
+    ` | ${roleText} | 结果: ${gameState.result}`;
+  if (isSolo && gameState.currentSide) {
+    mySide = gameState.currentSide;
+  }
 
   const red = [];
   const black = [];
@@ -499,6 +581,10 @@ function fillPieceEl(el, piece) {
       img.remove();
       fallback.hidden = false;
       el.appendChild(fallback);
+      const nameOnly = document.createElement('span');
+      nameOnly.className = 'piece-name';
+      nameOnly.textContent = toZh(piece.type);
+      el.appendChild(nameOnly);
       return;
     }
   }
@@ -508,6 +594,12 @@ function fillPieceEl(el, piece) {
   };
   el.appendChild(img);
   el.appendChild(fallback);
+  if (!piece.faceDown) {
+    const name = document.createElement('span');
+    name.className = 'piece-name';
+    name.textContent = toZh(piece.type);
+    el.appendChild(name);
+  }
 }
 
 function clearCell(cell) {
@@ -741,12 +833,21 @@ function onCellClicked(r, c) {
   if (!gameId || !gameState) return;
   audio.unlock();
 
-  if (!username || !mySide) {
-    showTip('请先输入用户名并新建/加入对局');
+  if (myRole === 'SPECTATOR') {
+    showTip('观战模式不可操作棋子');
     return;
   }
 
-  if (gameState.currentSide !== mySide) {
+  if (!username || myRole !== 'PLAYER') {
+    showTip('请先从大厅加入对局');
+    return;
+  }
+
+  if (isSolo) {
+    mySide = gameState.currentSide;
+  }
+
+  if (!canControlBoard()) {
     showTip('当前不是你的回合');
     return;
   }
@@ -929,9 +1030,11 @@ function updatePieceGhost() {
     img.src = url;
     img.alt = toZh(selectedPieceType);
     pieceGhostEl.appendChild(img);
-  } else {
-    pieceGhostEl.textContent = toZh(selectedPieceType);
   }
+  const name = document.createElement('span');
+  name.className = 'piece-name';
+  name.textContent = toZh(selectedPieceType);
+  pieceGhostEl.appendChild(name);
 }
 
 document.addEventListener('mousemove', function (e) {
@@ -950,7 +1053,7 @@ document.addEventListener('mousemove', function (e) {
 
 if (boardEl) {
   boardEl.addEventListener('mousemove', function (e) {
-    if (!selectedPieceId || !gameState || gameState.currentSide !== mySide) {
+    if (!selectedPieceId || !canControlBoard()) {
       boardEl.style.cursor = '';
       return;
     }
@@ -968,21 +1071,27 @@ if (boardEl) {
 
 if (btnLeave) {
   btnLeave.addEventListener('click', () => {
+    const leavingId = gameId;
+    const leavingUser = username;
+    if (leavingId && leavingUser) {
+      postRoom(`/${leavingId}/leave`, { username: leavingUser }).catch(() => {});
+    }
     gameId = null;
     gameState = null;
     mySide = null;
+    myRole = null;
+    isSolo = false;
     selectedPieceId = null;
     selectedPos = null;
+    selectedPieceType = null;
+    selectedPieceCamp = null;
     prevPiecesMap = null;
     boardBuilt = false;
     animBusy = false;
     hideResultBanner();
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    updateStatus();
-    boardEl.innerHTML = '';
-    scheduleLayoutBoardGrid();
-    if (roomPanel) roomPanel.classList.remove('collapsed');
-    refreshRoomList();
+    if (boardEl) boardEl.innerHTML = '';
+    showLobby();
   });
 }
 
@@ -997,18 +1106,13 @@ if (typeof ResizeObserver !== 'undefined') {
 
 function updateBoardInteractivity() {
   if (!boardEl) return;
-  if (!gameId || !gameState || !mySide) {
+  if (canControlBoard()) {
     boardEl.classList.remove('board-disabled');
-    return;
-  }
-  if (gameState.currentSide !== mySide) {
-    boardEl.classList.add('board-disabled');
   } else {
-    boardEl.classList.remove('board-disabled');
+    boardEl.classList.add('board-disabled');
   }
 }
 
-refreshRoomList();
-startRoomPolling();
+showLobby();
 scheduleLayoutBoardGrid();
 audio.preload();
