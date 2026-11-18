@@ -237,10 +237,13 @@ export class BattleScene {
       if (!this.interactive) return;
       const canvas = el();
       if (!canvas) return;
-      const cell = this._pickCell(e, canvas);
+      // Only complete a board action if the gesture started on the canvas
+      // (avoids HUD mute/leave/captured clicks raycasting into cells underneath).
       const drag = this._drag;
+      if (!drag) return;
       this._drag = null;
-      if (drag && this.selectedId != null) {
+      const cell = this._pickCell(e, canvas);
+      if (this.selectedId != null) {
         const av = this.avatars.get(this.selectedId);
         if (av) {
           av.root.traverse(o => {
@@ -248,12 +251,13 @@ export class BattleScene {
           });
           // snap back; game logic will animate real move
           if (av.cell) {
+            const lift = av.selected ? 0.35 : 0;
             const p = cellCenter(av.cell.r, av.cell.c, this.rows, this.cols);
-            av.root.position.set(p.x, av.baseY, p.z);
+            av.root.position.set(p.x, av.baseY + lift, p.z);
           }
         }
       }
-      if (cell) this.onCellAction(cell, { dragged: !!(drag && drag.moved) });
+      if (cell) this.onCellAction(cell, { dragged: !!drag.moved });
     };
 
     window.addEventListener('pointerdown', this._onPointerDown);
@@ -508,12 +512,26 @@ export class BattleScene {
 
   setSelected(id) {
     const prev = this.selectedId;
+    if (prev === id) {
+      const same = id != null ? this.avatars.get(id) : null;
+      if (!id || (same && same.selected)) return;
+      // Same id after mesh rebuild: re-apply lift without deselect flicker.
+      if (same) {
+        same.selected = true;
+        playSelect(same);
+      }
+      return;
+    }
     this.selectedId = id;
-    if (prev && this.avatars.has(prev) && prev !== id) {
-      playDeselect(this.avatars.get(prev));
+    if (prev && this.avatars.has(prev)) {
+      const old = this.avatars.get(prev);
+      old.selected = false;
+      playDeselect(old);
     }
     if (id && this.avatars.has(id)) {
-      playSelect(this.avatars.get(id));
+      const av = this.avatars.get(id);
+      av.selected = true;
+      playSelect(av);
     }
   }
 

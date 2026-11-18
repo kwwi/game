@@ -13,8 +13,9 @@ export function tickIdle(avatar, t, reduceMotion) {
   if (!avatar || reduceMotion) return;
   const root = avatar.root;
   if (!root || avatar.busy) return;
-  const amp = avatar.faceDown ? 0.02 : 0.045;
-  root.position.y = avatar.baseY + Math.sin(t * 2.2 + avatar.phase) * amp;
+  const lift = avatar.selected ? 0.35 : 0;
+  const amp = avatar.faceDown ? 0.02 : (avatar.selected ? 0.02 : 0.045);
+  root.position.y = avatar.baseY + lift + Math.sin(t * 2.2 + avatar.phase) * amp;
   const parts = root.userData.parts || {};
   if (parts.wingL && parts.wingR) {
     const flap = Math.sin(t * 5 + avatar.phase) * 0.25;
@@ -58,6 +59,7 @@ export function tweenNumber(getter, setter, to, ms) {
 
 export async function playSelect(avatar) {
   if (!avatar) return;
+  avatar.selected = true;
   avatar.busy = true;
   const root = avatar.root;
   await tweenVec3(root, 'position', new THREE.Vector3(root.position.x, avatar.baseY + 0.35, root.position.z), ANIM_MS.select);
@@ -66,6 +68,7 @@ export async function playSelect(avatar) {
 
 export async function playDeselect(avatar) {
   if (!avatar) return;
+  avatar.selected = false;
   const root = avatar.root;
   await tweenVec3(root, 'position', new THREE.Vector3(root.position.x, avatar.baseY, root.position.z), ANIM_MS.select * 0.7);
 }

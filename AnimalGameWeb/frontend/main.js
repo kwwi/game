@@ -130,14 +130,20 @@ function showTip(msg) {
   tipTimer = setTimeout(() => tipEl.classList.remove('show'), 2200);
 }
 
+let resultBannerTimer = null;
+
 function showResultBanner(text) {
   if (!resultBannerEl) return;
   const card = resultBannerEl.querySelector('.banner-card');
   if (card) card.textContent = text;
   resultBannerEl.classList.add('show');
+  clearTimeout(resultBannerTimer);
+  resultBannerTimer = setTimeout(() => hideResultBanner(), 2800);
 }
 
 function hideResultBanner() {
+  clearTimeout(resultBannerTimer);
+  resultBannerTimer = null;
   if (resultBannerEl) resultBannerEl.classList.remove('show');
 }
 
@@ -431,19 +437,21 @@ function refreshRoomList() {
         return;
       }
       list.forEach(r => {
+        const roomId = r.roomId || r.id;
+        if (!roomId) return;
         const row = document.createElement('div');
         row.className = 'room-row' + (r.full && !r.solo ? ' full' : '');
         const info = document.createElement('div');
         const badges = (r.solo ? '<span class="room-badge solo">自弈</span>' : '') +
           (r.full ? '<span class="room-badge">满员</span>' : '');
-        info.innerHTML = `<code>${(r.id || '').slice(0, 8)}</code> ${badges}<div class="empty">${r.playerA || '空'} vs ${r.playerB || '空'}</div>`;
+        info.innerHTML = `<code>${String(roomId).slice(0, 8)}</code> ${badges}<div class="empty">${r.playerA || '空'} vs ${r.playerB || '空'}</div>`;
         const actions = document.createElement('div');
         actions.className = 'lobby-actions';
         if (!r.solo && !r.full) {
           const joinBtn = document.createElement('button');
           joinBtn.type = 'button';
           joinBtn.textContent = (!r.hasGame && !r.playerA) ? '进入空房' : '加入';
-          joinBtn.addEventListener('click', () => joinRoomById(r.id));
+          joinBtn.addEventListener('click', () => joinRoomById(roomId));
           actions.appendChild(joinBtn);
         }
         if (r.hasGame) {
@@ -451,7 +459,7 @@ function refreshRoomList() {
           sp.type = 'button';
           sp.className = 'ghost';
           sp.textContent = '观战';
-          sp.addEventListener('click', () => spectateRoomById(r.id));
+          sp.addEventListener('click', () => spectateRoomById(roomId));
           actions.appendChild(sp);
         }
         row.appendChild(info);
