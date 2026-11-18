@@ -1,0 +1,125 @@
+import * as THREE from 'three';
+import { LobbyScene } from './LobbyScene.js';
+import { BattleScene } from './BattleScene.js';
+import { playEnterRoom } from './Transition.js';
+
+const PIXEL_CAP = 1.75;
+
+export function createApp(rootEl, opts = {}) {
+  const reduceMotion = !!opts.reduceMotion;
+  const renderer = new THREE.WebGLRenderer({
+    antialias: !reduceMotion,
+    alpha: true,
+    powerPreference: 'high-performance'
+  });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PIXEL_CAP));
+  renderer.setSize(rootEl.clientWidth || window.innerWidth, rootEl.clientHeight || window.innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = !reduceMotion;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.domElement.className = 'webgl-canvas';
+  renderer.domElement.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;';
+  rootEl.appendChild(renderer.domElement);
+
+  const clock = new THREE.Clock();
+  let mode = 'lobby'; // lobby | battle | transition
+  let raf = 0;
+  let disposed = false;
+
+  const lobby = new LobbyScene({ reduceMotion });
+  const battle = new BattleScene({
+    reduceMotion,
+    onCellAction: opts.onCellAction,
+    onHoverCell: opts.onHoverCell
+  });
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sceneTransitionOverlay';
+  overlay.className = 'scene-transition-overlay';
+  rootEl.appendChild(overlay);
+
+  function resize() {
+    const w = rootEl.clientWidth || window.innerWidth;
+    const h = rootEl.clientHeight || window.innerHeight;
+    renderer.setSize(w, h, false);
+    lobby.resize(w, h);
+    battle.resize(w, h);
+  }
+
+  function tick() {
+    if (disposed) return;
+    raf = requestAnimationFrame(tick);
+    const dt = Math.min(0.05, clock.getDelta());
+    if (mode === 'lobby' || mode === 'transition') lobby.update(dt);
+    if (mode === 'battle' || mode === 'transition') battle.update(dt);
+    const scene = mode === 'battle' ? battle.scene : lobby.scene;
+    const camera = mode === 'battle' ? battle.camera : lobby.camera;
+    if (mode === 'transition' && overlay.dataset.phase === 'battle') {
+      renderer.render(battle.scene, battle.camera);
+    } else {
+      renderer.render(scene, camera);
+    }
+  }
+
+  function showLobby() {
+    mode = 'lobby';
+    battle.setInteractive(false);
+    lobby.setActive(true);
+    document.body.classList.remove('mode-battle');
+    document.body.classList.add('mode-lobby');
+  }
+
+  function showBattle() {
+    mode = 'battle';
+    lobby.setActive(false);
+    battle.setInteractive(true);
+    document.body.classList.remove('mode-lobby');
+    document.body.classList.add('mode-battle');
+  }
+
+  async function enterBattleWithTransition() {
+    if (reduceMotion) {
+      showBattle();
+      return;
+    }
+    mode = 'transition';
+    battle.setInteractive(false);
+    await playEnterRoom({
+      lobby,
+      battle,
+      overlay,
+      renderer,
+      duration: 1600
+    });
+    showBattle();
+  }
+
+  window.addEventListener('resize', resize);
+  resize();
+  showLobby();
+  tick();
+
+  return {
+    renderer,
+    lobby,
+    battle,
+    showLobby,
+    showBattle,
+    enterBattleWithTransition,
+    resize,
+    getMode: () => mode,
+    setHandlers(handlers) {
+      battle.setHandlers(handlers);
+    },
+    dispose() {
+      disposed = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+      lobby.dispose();
+      battle.dispose();
+      renderer.dispose();
+      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }
+  };
+}
