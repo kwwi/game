@@ -603,14 +603,10 @@ function applyBoardDiff(prevMap, state, opts) {
   });
 
   if (!flips.length && !moves.length && !captures.length) {
-    for (let r = 1; r <= rows; r++) {
-      for (let c = 1; c <= cols; c++) {
-        placePieceInCell(getCellEl(r, c), findPieceAt(r, c));
-      }
-    }
+    // Keep existing piece nodes so idle CSS animations do not restart every poll.
+    syncSelectionHighlights();
     prevPiecesMap = nextMap;
     updatePieceGhost();
-    scheduleLayoutBoardGrid();
     return Promise.resolve();
   }
 
@@ -682,22 +678,48 @@ function animateMove(prev, next, victim) {
     audio.play('capture');
     const victimEl = toCell.querySelector('.piece');
     if (victimEl && !reduceMotion) victimEl.classList.add('anim-capture-victim');
-    if (!reduceMotion) mover.classList.add('anim-capture-attacker');
     audio.playAnimal(next.type);
   } else {
     audio.play('move');
   }
 
   if (!reduceMotion) {
+    fromCell.classList.add('moving-from');
     mover.classList.add('anim-move');
-    mover.style.transform = `translate(${dx}px, ${dy}px)`;
+    // Force layout, then animate via CSS vars (idle keyframes are disabled by .anim-move).
+    mover.style.setProperty('--move-x', '0px');
+    mover.style.setProperty('--move-y', '0px');
+    mover.style.setProperty('--move-scale', '1');
+    mover.style.setProperty('--move-bright', '1');
+    void mover.offsetWidth;
+    mover.style.setProperty('--move-x', dx + 'px');
+    mover.style.setProperty('--move-y', dy + 'px');
+    if (victim) {
+      mover.style.setProperty('--move-scale', '1.12');
+      mover.style.setProperty('--move-bright', '1.15');
+    }
   }
 
   return wait(reduceMotion ? 0 : (victim ? 450 : 300)).then(() => {
-    mover.style.transform = '';
-    mover.classList.remove('anim-move', 'anim-capture-attacker');
+    mover.classList.remove('anim-move');
+    mover.style.removeProperty('--move-x');
+    mover.style.removeProperty('--move-y');
+    mover.style.removeProperty('--move-scale');
+    mover.style.removeProperty('--move-bright');
+    fromCell.classList.remove('moving-from');
     clearCell(fromCell);
     placePieceInCell(toCell, next);
+  });
+}
+
+function syncSelectionHighlights() {
+  if (!boardEl) return;
+  boardEl.querySelectorAll('.cell').forEach(cell => {
+    const pieceEl = cell.querySelector('.piece');
+    const id = pieceEl ? Number(pieceEl.dataset.id) : null;
+    const selected = selectedPieceId != null && id === selectedPieceId;
+    cell.classList.toggle('selected', selected);
+    if (pieceEl) pieceEl.classList.toggle('selected-piece', selected);
   });
 }
 
@@ -751,6 +773,7 @@ function onCellClicked(r, c) {
           selectedPieceType = null;
           selectedPieceCamp = null;
           updateStatus({ prevResult });
+          updateBoardInteractivity();
           return applyBoardDiff(prevMap, state, { animate: !reduceMotion });
         })
         .catch(() => showTip('翻牌失败'));
@@ -831,6 +854,7 @@ function sendMove(moverId, from, to, capture, capturedId) {
       selectedPieceType = null;
       selectedPieceCamp = null;
       updateStatus({ prevResult });
+      updateBoardInteractivity();
       return applyBoardDiff(prevMap, state, { animate: !reduceMotion });
     })
     .then(() => updatePieceGhost())
@@ -882,13 +906,21 @@ function isLegalTarget(toR, toC) {
   return canCapture(selectedPieceType, target.type);
 }
 
+let ghostContentKey = null;
+
 function updatePieceGhost() {
   if (!pieceGhostEl) return;
   if (!selectedPieceId || !selectedPieceType) {
     pieceGhostEl.style.display = 'none';
     pieceGhostEl.innerHTML = '';
+    ghostContentKey = null;
     return;
   }
+  const key = selectedPieceType + '|' + (selectedPieceCamp || '');
+  if (ghostContentKey === key && pieceGhostEl.firstChild) {
+    return;
+  }
+  ghostContentKey = key;
   const url = pieceImageUrl(selectedPieceType);
   pieceGhostEl.innerHTML = '';
   pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'camp-red' : 'camp-black';
@@ -907,7 +939,10 @@ document.addEventListener('mousemove', function (e) {
     pieceGhostEl.style.display = 'block';
     pieceGhostEl.style.left = e.clientX + 'px';
     pieceGhostEl.style.top = e.clientY + 'px';
-    updatePieceGhost();
+    // Content is rebuilt only when selection changes, not on every move.
+    if (ghostContentKey !== selectedPieceType + '|' + (selectedPieceCamp || '')) {
+      updatePieceGhost();
+    }
   } else if (pieceGhostEl) {
     pieceGhostEl.style.display = 'none';
   }
