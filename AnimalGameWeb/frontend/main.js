@@ -3,20 +3,20 @@ const ROOMS_API = 'http://localhost:8080/api/rooms';
 const PIECE_IMG_BASE = 'assets/pieces';
 
 const PIECE_FILE = {
-  WHALE: 'whale.jpg',
-  PHOENIX: 'phoenix.jpg',
-  DRAGON: 'dragon.jpg',
-  ELEPHANT: 'elephant.jpg',
-  LION: 'lion.jpg',
-  TIGER: 'tiger.jpg',
-  LEOPARD: 'leopard.jpg',
-  FORTUNE: 'fortune.jpg',
-  WOLF: 'wolf.jpg',
-  DOG: 'dog.jpg',
-  CAT: 'cat.jpg',
-  MOUSE: 'mouse.jpg'
+  WHALE: 'ink/whale.svg',
+  PHOENIX: 'ink/phoenix.svg',
+  DRAGON: 'ink/dragon.svg',
+  ELEPHANT: 'ink/elephant.svg',
+  LION: 'ink/lion.svg',
+  TIGER: 'ink/tiger.svg',
+  LEOPARD: 'ink/leopard.svg',
+  FORTUNE: 'ink/fortune.svg',
+  WOLF: 'ink/wolf.svg',
+  DOG: 'ink/dog.svg',
+  CAT: 'ink/cat.svg',
+  MOUSE: 'ink/mouse.svg'
 };
-const BACK_IMG = PIECE_IMG_BASE + '/back.jpg';
+const BACK_IMG = PIECE_IMG_BASE + '/ink/back.svg';
 
 let gameId = null;
 let gameState = null;
@@ -560,8 +560,10 @@ function createPieceEl(piece) {
 
 function fillPieceEl(el, piece) {
   el.dataset.id = String(piece.id);
-  el.dataset.type = piece.faceDown ? '' : (piece.type || '');
+  // Keep type on the node even while face-down so 3D flip can reveal without reloading art.
+  el.dataset.type = piece.type || '';
   el.classList.toggle('face-down', !!piece.faceDown);
+  el.classList.toggle('is-back', !!piece.faceDown);
   el.classList.toggle('camp-red', !piece.faceDown && piece.camp === 'RED');
   el.classList.toggle('camp-black', !piece.faceDown && piece.camp === 'BLACK');
   el.classList.toggle(
@@ -571,42 +573,37 @@ function fillPieceEl(el, piece) {
   el.setAttribute('aria-label', piece.faceDown ? '未翻开棋子' : toZh(piece.type));
 
   el.innerHTML = '';
-  const img = document.createElement('img');
-  img.alt = '';
-  img.draggable = false;
-  const fallback = document.createElement('span');
-  fallback.className = 'piece-fallback';
-  fallback.textContent = piece.faceDown ? '？' : toZh(piece.type);
-  fallback.hidden = true;
+  const cube = document.createElement('span');
+  cube.className = 'piece-cube';
 
-  if (piece.faceDown) {
-    img.src = BACK_IMG;
-  } else {
-    const url = pieceImageUrl(piece.type);
-    if (url) img.src = url;
-    else {
-      img.remove();
-      fallback.hidden = false;
-      el.appendChild(fallback);
-      const nameOnly = document.createElement('span');
-      nameOnly.className = 'piece-name';
-      nameOnly.textContent = toZh(piece.type);
-      el.appendChild(nameOnly);
-      return;
-    }
-  }
-  img.onerror = function () {
-    img.remove();
-    fallback.hidden = false;
-  };
-  el.appendChild(img);
-  el.appendChild(fallback);
-  if (!piece.faceDown) {
-    const name = document.createElement('span');
-    name.className = 'piece-name';
-    name.textContent = toZh(piece.type);
-    el.appendChild(name);
-  }
+  const front = document.createElement('span');
+  front.className = 'face face-front';
+  const frontImg = document.createElement('img');
+  frontImg.alt = '';
+  frontImg.draggable = false;
+  frontImg.decoding = 'async';
+  frontImg.loading = 'lazy';
+  frontImg.src = pieceImageUrl(piece.type) || BACK_IMG;
+  front.appendChild(frontImg);
+  const name = document.createElement('span');
+  name.className = 'piece-name';
+  name.textContent = toZh(piece.type);
+  if (piece.faceDown) name.hidden = true;
+  front.appendChild(name);
+
+  const back = document.createElement('span');
+  back.className = 'face face-back';
+  const backImg = document.createElement('img');
+  backImg.alt = '';
+  backImg.draggable = false;
+  backImg.decoding = 'async';
+  backImg.loading = 'lazy';
+  backImg.src = BACK_IMG;
+  back.appendChild(backImg);
+
+  cube.appendChild(front);
+  cube.appendChild(back);
+  el.appendChild(cube);
 }
 
 function clearCell(cell) {
@@ -748,13 +745,36 @@ function animateFlip(piece) {
   const cell = getCellEl(piece.r, piece.c);
   if (!cell) return Promise.resolve();
   audio.play('flip');
-  placePieceInCell(cell, piece);
-  const el = cell.querySelector('.piece');
+  let el = cell.querySelector('.piece');
+  if (!el) {
+    placePieceInCell(cell, Object.assign({}, piece, { faceDown: true }));
+    el = cell.querySelector('.piece');
+  }
   if (el && !reduceMotion) {
-    el.classList.add('anim-flip');
+    el.classList.add('is-back', 'face-down', 'anim-flip');
+    el.classList.remove('camp-red', 'camp-black', 'selected-piece');
+    // Force style, then rotate to front.
+    void el.offsetWidth;
+    requestAnimationFrame(() => {
+      el.classList.remove('is-back', 'face-down');
+      el.classList.toggle('camp-red', piece.camp === 'RED');
+      el.classList.toggle('camp-black', piece.camp === 'BLACK');
+      el.dataset.type = piece.type || '';
+      const name = el.querySelector('.face-front .piece-name');
+      if (name) {
+        name.textContent = toZh(piece.type);
+        name.hidden = false;
+      }
+      const img = el.querySelector('.face-front img');
+      if (img) img.src = pieceImageUrl(piece.type) || BACK_IMG;
+    });
+  } else {
+    placePieceInCell(cell, piece);
   }
   audio.playAnimal(piece.type);
-  return wait(reduceMotion ? 0 : 560);
+  return wait(reduceMotion ? 0 : 520).then(() => {
+    placePieceInCell(cell, piece);
+  });
 }
 
 function animateMove(prev, next, victim) {
@@ -1031,7 +1051,7 @@ function updatePieceGhost() {
   ghostContentKey = key;
   const url = pieceImageUrl(selectedPieceType);
   pieceGhostEl.innerHTML = '';
-  pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'camp-red' : 'camp-black';
+  pieceGhostEl.className = 'piece-ghost-3d ' + (selectedPieceCamp === 'RED' ? 'camp-red' : 'camp-black');
   if (url) {
     const img = document.createElement('img');
     img.src = url;

@@ -405,11 +405,21 @@ button.icon-btn {
   pointer-events: none;
 }
 
+/* CSS 3D scene: perspective on wrapper only (cheap, GPU-friendly) */
+.board-scene {
+  perspective: 1200px;
+  perspective-origin: 50% 35%;
+  padding: 8px 4px 18px;
+}
+
 #board {
   display: grid;
   margin: 0 auto;
   position: relative;
   z-index: 1;
+  transform-style: preserve-3d;
+  transform: rotateX(18deg) rotateZ(-2deg);
+  transform-origin: center center;
 }
 
 .cell {
@@ -423,13 +433,16 @@ button.icon-btn {
   background:
     linear-gradient(160deg, var(--grass-a), var(--grass-b));
   border: 1px solid rgba(70, 90, 40, 0.28);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
-  overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 2px 0 rgba(40, 50, 20, 0.18);
+  overflow: visible;
+  transform-style: preserve-3d;
+  contain: layout style;
+  transition: box-shadow 0.2s ease;
 }
 
 .cell.moving-from {
-  overflow: visible;
   z-index: 6;
 }
 
@@ -473,55 +486,81 @@ button.icon-btn {
   opacity: 0.9;
 }
 
-/* —— Pieces (square sketch tiles) —— */
+/* —— Pieces: CSS 3D double-sided ink tiles —— */
 .piece {
   position: relative;
-  width: 90%;
-  height: 90%;
+  width: 88%;
+  height: 88%;
   border: none;
   padding: 0;
   border-radius: 8px;
   cursor: inherit;
-  background:
-    linear-gradient(160deg, #f7f1e4, #e8dcc6);
-  box-shadow:
-    0 3px 6px rgba(0, 0, 0, 0.28),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  background: transparent;
+  box-shadow: none;
+  display: block;
+  overflow: visible;
+  transform-style: preserve-3d;
+  transform-origin: center;
+  /* Keep idle quiet for 52 tiles; only lift selected / animating pieces */
+  transition: filter 0.2s ease;
+}
+
+.piece-cube {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+  border-radius: 8px;
+}
+
+.piece .face {
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  transform-origin: center;
-  transition: transform 0.2s ease;
-}
-
-.piece.camp-red {
+  background: linear-gradient(160deg, #f7f1e4, #e6d8c0);
   box-shadow:
-    0 0 0 3px var(--red),
-    0 3px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
-}
-
-.piece.camp-black {
-  box-shadow:
-    0 0 0 3px #222,
-    0 3px 8px rgba(0, 0, 0, 0.3),
+    0 4px 10px rgba(0, 0, 0, 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
-.piece.face-down {
-  background:
-    linear-gradient(160deg, #3f6a48, #243f2c);
+.piece .face-front {
+  transform: translateZ(1px);
+}
+
+.piece .face-back {
+  transform: rotateY(180deg) translateZ(1px);
+  background: linear-gradient(160deg, #3f6a48, #243f2c);
+}
+
+.piece.is-back .piece-cube,
+.piece.face-down .piece-cube {
+  transform: rotateY(180deg);
+}
+
+.piece.camp-red .face-front {
   box-shadow:
-    0 0 0 2px #1a3320,
-    0 3px 8px rgba(0, 0, 0, 0.35);
+    0 0 0 2px var(--red),
+    0 4px 10px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.piece.camp-black .face-front {
+  box-shadow:
+    0 0 0 2px #222,
+    0 4px 10px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 
 .piece img {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
   pointer-events: none;
   display: block;
 }
@@ -554,10 +593,6 @@ button.icon-btn {
   border-color: rgba(0, 0, 0, 0.45);
 }
 
-.piece.face-down .piece-name {
-  display: none;
-}
-
 .piece .piece-fallback {
   font-family: var(--font-display);
   font-size: calc(var(--cell) * 0.38);
@@ -565,111 +600,50 @@ button.icon-btn {
   line-height: 1;
 }
 
-.piece.face-down .piece-fallback {
-  color: #d8efd0;
-}
-
-.piece.camp-red .piece-fallback { color: var(--red); }
-.piece.camp-black .piece-fallback { color: #111; }
-
 .piece.selected-piece {
-  animation: selectPulse 1.2s ease-in-out infinite;
+  z-index: 4;
 }
 
-/* Per-animal idle animations */
-.piece[data-type="WHALE"]:not(.face-down) { animation: bob 2.4s ease-in-out infinite; }
-.piece[data-type="PHOENIX"]:not(.face-down) { animation: flutter 1.6s ease-in-out infinite; }
-.piece[data-type="DRAGON"]:not(.face-down) { animation: shimmer 2s ease-in-out infinite; }
-.piece[data-type="ELEPHANT"]:not(.face-down) { animation: stomp 2.8s ease-in-out infinite; }
-.piece[data-type="LION"]:not(.face-down) { animation: mane 2.2s ease-in-out infinite; }
-.piece[data-type="TIGER"]:not(.face-down) { animation: crouch 1.8s ease-in-out infinite; }
-.piece[data-type="LEOPARD"]:not(.face-down) { animation: leapIdle 1.4s ease-in-out infinite; }
-.piece[data-type="FORTUNE"]:not(.face-down) { animation: sparkle 1.5s ease-in-out infinite; }
-.piece[data-type="WOLF"]:not(.face-down) { animation: sway 2s ease-in-out infinite; }
-.piece[data-type="DOG"]:not(.face-down) { animation: nod 1.7s ease-in-out infinite; }
-.piece[data-type="CAT"]:not(.face-down) { animation: stretch 2.4s ease-in-out infinite; }
-.piece[data-type="MOUSE"]:not(.face-down) { animation: scurry 0.9s ease-in-out infinite; }
-
-.piece.anim-flip {
-  animation: flipReveal 0.55s ease forwards !important;
+.piece.selected-piece .piece-cube {
+  transform: translateZ(14px) scale(1.04);
+  animation: selectBob 1.4s ease-in-out infinite;
 }
 
-/* Kill idle keyframes so inline/CSS-var translate can travel across cells */
+.piece.is-back.selected-piece .piece-cube,
+.piece.face-down.selected-piece .piece-cube {
+  transform: rotateY(180deg) translateZ(14px) scale(1.04);
+}
+
+.piece.anim-flip .piece-cube {
+  transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+  will-change: transform;
+}
+
 .piece.anim-move {
-  animation: none !important;
-  transform: translate(var(--move-x, 0px), var(--move-y, 0px)) scale(var(--move-scale, 1)) !important;
-  transition: transform 0.28s ease !important;
   z-index: 8;
+  will-change: transform;
+  transform: translate3d(var(--move-x, 0px), var(--move-y, 0px), 18px) scale(var(--move-scale, 1)) !important;
+  transition: transform 0.28s ease !important;
   filter: brightness(var(--move-bright, 1));
+}
+
+.piece.anim-move .piece-cube {
+  animation: none !important;
 }
 
 .piece.anim-capture-victim {
   animation: captureHit 0.45s ease forwards !important;
 }
 
-@keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4%); }
+@keyframes selectBob {
+  0%, 100% { transform: translateZ(14px) scale(1.04); }
+  50% { transform: translateZ(20px) scale(1.06); }
 }
-@keyframes flutter {
-  0%, 100% { transform: rotate(-3deg) scale(1); }
-  50% { transform: rotate(3deg) scale(1.04); }
-}
-@keyframes shimmer {
-  0%, 100% { filter: brightness(1); transform: scale(1); }
-  50% { filter: brightness(1.15) saturate(1.2); transform: scale(1.03); }
-}
-@keyframes stomp {
-  0%, 100% { transform: scale(1); }
-  40% { transform: scale(1.05); }
-  55% { transform: scale(0.97); }
-}
-@keyframes mane {
-  0%, 100% { transform: rotate(0deg); }
-  50% { transform: rotate(2deg) scale(1.03); }
-}
-@keyframes crouch {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(3%) scale(0.97); }
-}
-@keyframes leapIdle {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6%); }
-}
-@keyframes sparkle {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.18) saturate(1.15); }
-}
-@keyframes sway {
-  0%, 100% { transform: rotate(-2deg); }
-  50% { transform: rotate(2deg); }
-}
-@keyframes nod {
-  0%, 100% { transform: rotate(0deg); }
-  30% { transform: rotate(-6deg); }
-  60% { transform: rotate(4deg); }
-}
-@keyframes stretch {
-  0%, 100% { transform: scaleY(1); }
-  50% { transform: scaleY(1.06) scaleX(0.97); }
-}
-@keyframes scurry {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-5%); }
-  75% { transform: translateX(5%); }
-}
-@keyframes selectPulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.08); }
-}
-@keyframes flipReveal {
-  0% { transform: rotateY(90deg) scale(0.8); opacity: 0.3; }
-  100% { transform: rotateY(0) scale(1); opacity: 1; }
-}
+
 @keyframes captureHit {
-  0% { transform: scale(1); filter: brightness(1); opacity: 1; }
-  40% { transform: scale(1.15); filter: brightness(2); }
-  100% { transform: scale(0.2); opacity: 0; }
+  0% { transform: translateZ(8px) scale(1); filter: brightness(1); opacity: 1; }
+  40% { transform: translateZ(24px) scale(1.12); filter: brightness(1.8); }
+  100% { transform: translateZ(0) scale(0.2); opacity: 0; }
 }
 /* Captured panel */
 .captured-panel {
@@ -759,11 +733,12 @@ button.icon-btn {
   display: none;
   width: 48px;
   height: 48px;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) translateZ(0);
   border-radius: 8px;
   overflow: hidden;
-  opacity: 0.85;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  opacity: 0.9;
+  background: #f7f1e4;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
 #pieceGhost .piece-name {
@@ -787,8 +762,8 @@ button.icon-btn {
   object-fit: cover;
 }
 
-#pieceGhost.camp-red { box-shadow: 0 0 0 3px var(--red), 0 6px 16px rgba(0,0,0,0.35); }
-#pieceGhost.camp-black { box-shadow: 0 0 0 3px #222, 0 6px 16px rgba(0,0,0,0.35); }
+#pieceGhost.camp-red { box-shadow: 0 0 0 2px var(--red), 0 8px 18px rgba(0,0,0,0.35); }
+#pieceGhost.camp-black { box-shadow: 0 0 0 2px #222, 0 8px 18px rgba(0,0,0,0.35); }
 
 #resultBanner {
   position: fixed;
@@ -827,17 +802,26 @@ button.icon-btn {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .piece,
-  .piece[data-type],
-  .piece.selected-piece,
-  .piece.anim-flip,
+  #board {
+    transform: none;
+  }
+  .piece.selected-piece .piece-cube,
   .piece.anim-capture-victim,
   #tip,
   #resultBanner.show,
   #resultBanner .banner-card {
     animation: none !important;
   }
-  .piece.anim-move {
+  .piece-cube,
+  .piece.anim-move,
+  .piece.anim-flip .piece-cube {
     transition: none !important;
+  }
+}
+
+/* Flatten 3D on very small screens for readability/perf */
+@media (max-width: 520px) {
+  #board {
+    transform: rotateX(10deg);
   }
 }

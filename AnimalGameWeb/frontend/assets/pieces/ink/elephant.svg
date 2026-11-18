@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 象：大耳 + 身 + 鼻 -->
+  <ellipse cx="62" cy="64" rx="28" ry="24" stroke="#1a1a1a" stroke-width="3" fill="none"/>
+  <path d="M40 58 C28 48, 22 58, 30 70" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M84 58 C96 48, 102 58, 94 70" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M74 78 C86 90, 88 104, 80 112" stroke="#1a1a1a" stroke-width="3" stroke-linecap="round" fill="none"/>
+  <circle cx="54" cy="60" r="2" fill="#1a1a1a"/>
+  <path d="M50 84 L48 100" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M66 86 L68 102" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

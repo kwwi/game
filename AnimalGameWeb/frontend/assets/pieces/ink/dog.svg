@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 狗：圆脸软耳 -->
+  <circle cx="64" cy="66" r="26" stroke="#1a1a1a" stroke-width="3" fill="none"/>
+  <path d="M42 54 C34 44, 28 54, 38 64" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M86 54 C94 44, 100 54, 90 64" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <circle cx="54" cy="64" r="2.2" fill="#1a1a1a"/>
+  <circle cx="74" cy="64" r="2.2" fill="#1a1a1a"/>
+  <path d="M58 76 C64 80, 70 80, 76 76" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M64 92 L64 108" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

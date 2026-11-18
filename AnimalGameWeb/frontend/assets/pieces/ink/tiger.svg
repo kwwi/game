@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 虎：头廓 + 王字纹 -->
+  <path d="M40 44 C44 28, 84 28, 88 44 C96 56, 94 84, 64 92 C34 84, 32 56, 40 44 Z" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+  <path d="M56 46 L56 58" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+  <path d="M64 42 L64 60" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round"/>
+  <path d="M72 46 L72 58" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+  <circle cx="52" cy="62" r="2" fill="#1a1a1a"/>
+  <circle cx="76" cy="62" r="2" fill="#1a1a1a"/>
+  <path d="M58 74 C64 78, 70 78, 76 74" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+</svg>

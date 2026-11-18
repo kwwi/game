@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 豹：流线身姿 + 几点斑 -->
+  <path d="M28 78 C40 58, 70 50, 96 58 C104 70, 90 86, 70 88 C50 90, 34 86, 28 78 Z" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+  <path d="M96 60 C108 52, 114 64, 104 72" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <circle cx="52" cy="68" r="2.4" fill="#1a1a1a"/>
+  <circle cx="66" cy="64" r="2" fill="#1a1a1a"/>
+  <circle cx="78" cy="70" r="2.2" fill="#1a1a1a"/>
+  <path d="M44 86 L40 102" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M72 88 L76 104" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="100" cy="62" r="1.6" fill="#1a1a1a"/>
+</svg>

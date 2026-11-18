@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 鼠：圆耳小身长尾 -->
+  <circle cx="58" cy="68" r="22" stroke="#1a1a1a" stroke-width="3" fill="none"/>
+  <circle cx="42" cy="48" r="12" stroke="#1a1a1a" stroke-width="2.4" fill="none"/>
+  <circle cx="74" cy="48" r="12" stroke="#1a1a1a" stroke-width="2.4" fill="none"/>
+  <circle cx="52" cy="66" r="2" fill="#1a1a1a"/>
+  <circle cx="66" cy="66" r="2" fill="#1a1a1a"/>
+  <path d="M78 78 C96 70, 110 86, 104 98" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <path d="M58 78 L58 84" stroke="#1a1a1a" stroke-width="1.8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 鲸：弧背 + 尾 + 喷水 -->
+  <path d="M18 78 C36 48, 92 46, 108 70 C96 86, 48 92, 28 84 Z" stroke="#1a1a1a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <path d="M100 68 C112 58, 118 72, 108 78" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M70 52 C72 40, 68 32, 74 24" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" opacity="0.75"/>
+  <circle cx="42" cy="68" r="2.2" fill="#1a1a1a"/>
+</svg>

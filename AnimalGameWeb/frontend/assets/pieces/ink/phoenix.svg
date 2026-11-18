@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 凤：冠羽 + 身 + 开翅 -->
+  <path d="M64 36 C58 52, 58 70, 64 88 C70 70, 70 52, 64 36 Z" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+  <path d="M64 50 C40 58, 28 74, 30 92" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M64 50 C88 58, 100 74, 98 92" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round" fill="none"/>
+  <path d="M64 36 C60 24, 52 20, 48 18" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M64 36 C68 24, 76 20, 80 18" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M64 88 C58 102, 54 110, 50 116" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+  <path d="M64 88 C70 102, 74 110, 78 116" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" opacity="0.8"/>
+</svg>
