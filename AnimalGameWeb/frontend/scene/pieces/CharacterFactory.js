@@ -77,25 +77,79 @@ function addShadow(mesh) {
 }
 
 function makeSealedPillar(camp) {
+  // Flat octagonal seal stamp — short enough that jade grid reads first.
   const g = new THREE.Group();
   g.name = 'sealed';
+  const isRed = camp === 'RED';
+  const bodyCol = isRed ? 0x6a2a30 : 0x2a3850;
+  const emitCol = isRed ? 0x3a1418 : 0x142030;
+  const accent = isRed ? 0xffb070 : 0x88d0ff;
+
   const stone = addShadow(new THREE.Mesh(
-    geo('sealBody', () => new THREE.BoxGeometry(0.72, 1.05, 0.42)),
+    geo('sealBodyFlat', () => new THREE.CylinderGeometry(0.34, 0.36, 0.26, 8)),
     new THREE.MeshStandardMaterial({
-      color: camp === 'RED' ? 0x4a1820 : 0x1c2433,
-      emissive: camp === 'RED' ? 0x6a1820 : 0x183050,
-      emissiveIntensity: 0.75,
-      roughness: 0.65,
-      metalness: 0.35
+      color: bodyCol,
+      emissive: emitCol,
+      emissiveIntensity: 0.28,
+      roughness: 0.5,
+      metalness: 0.42
     })
   ));
-  stone.position.y = 0.55;
-  const rune = addShadow(new THREE.Mesh(
-    geo('sealRune', () => new THREE.TorusGeometry(0.22, 0.035, 6, 16)),
-    accentMat(camp)
+  stone.position.y = 0.15;
+
+  const lid = addShadow(new THREE.Mesh(
+    geo('sealLid', () => new THREE.CylinderGeometry(0.3, 0.32, 0.06, 8)),
+    new THREE.MeshStandardMaterial({
+      color: bodyCol,
+      emissive: emitCol,
+      emissiveIntensity: 0.25,
+      roughness: 0.4,
+      metalness: 0.5
+    })
   ));
-  rune.position.set(0, 0.7, 0.22);
-  g.add(stone, rune);
+  lid.position.y = 0.3;
+
+  const rune = new THREE.Mesh(
+    geo('sealRuneTop', () => new THREE.TorusGeometry(0.15, 0.022, 6, 20)),
+    new THREE.MeshStandardMaterial({
+      color: accent,
+      emissive: accent,
+      emissiveIntensity: 0.5,
+      metalness: 0.6,
+      roughness: 0.3
+    })
+  );
+  rune.rotation.x = Math.PI / 2;
+  rune.position.y = 0.34;
+
+  const padTex = new THREE.CanvasTexture(makeGlyphTexture('封', isRed ? '#ffb070' : '#88d0ff'));
+  padTex.colorSpace = THREE.SRGBColorSpace;
+  const pad = new THREE.Mesh(
+    geo('sealPad', () => new THREE.CircleGeometry(0.38, 20)),
+    new THREE.MeshBasicMaterial({
+      map: padTex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
+  );
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.02;
+
+  const ring = new THREE.Mesh(
+    geo('sealAura', () => new THREE.TorusGeometry(0.4, 0.022, 6, 20)),
+    new THREE.MeshBasicMaterial({
+      color: accent,
+      transparent: true,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.03;
+
+  g.add(stone, lid, rune, pad, ring);
   return g;
 }
 

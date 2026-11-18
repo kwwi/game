@@ -64,12 +64,37 @@ export function makeSkyGradientCanvas(w = 4, h = 256) {
   canvas.height = h;
   const ctx = canvas.getContext('2d');
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, '#1a0a38');
-  g.addColorStop(0.35, '#152048');
-  g.addColorStop(0.7, '#1a3058');
-  g.addColorStop(1, '#c8d8e8');
+  g.addColorStop(0, '#140828');
+  g.addColorStop(0.28, '#1a1848');
+  g.addColorStop(0.55, '#243060');
+  g.addColorStop(0.78, '#3a5080');
+  g.addColorStop(1, '#a8c0d8');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
+  return canvas;
+}
+
+/** Soft nebula blotches for additive sky planes. */
+export function makeNebulaCanvas(size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, size, size);
+  const blobs = [
+    { x: 0.35, y: 0.4, r: 0.45, c: 'rgba(160,60,180,0.55)' },
+    { x: 0.65, y: 0.35, r: 0.4, c: 'rgba(40,120,200,0.5)' },
+    { x: 0.5, y: 0.55, r: 0.35, c: 'rgba(200,120,80,0.28)' }
+  ];
+  blobs.forEach(b => {
+    const g = ctx.createRadialGradient(
+      b.x * size, b.y * size, 0,
+      b.x * size, b.y * size, b.r * size
+    );
+    g.addColorStop(0, b.c);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+  });
   return canvas;
 }
 

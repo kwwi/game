@@ -51,7 +51,8 @@ export function createApp(rootEl, opts = {}) {
 
   const battleComposer = new EffectComposer(renderer);
   battleComposer.addPass(new RenderPass(battle.scene, battle.camera));
-  const battleBloom = new UnrealBloomPass(size.clone(), reduceMotion ? 0.35 : 0.85, 0.55, 0.75);
+  // Tighter bloom: gems / glyphs / spirit edges only — avoid blowing seals white
+  const battleBloom = new UnrealBloomPass(size.clone(), reduceMotion ? 0.28 : 0.62, 0.5, 0.85);
   battleComposer.addPass(battleBloom);
 
   function resize() {
