@@ -69,8 +69,10 @@ export async function playSelect(avatar) {
 export async function playDeselect(avatar) {
   if (!avatar) return;
   avatar.selected = false;
+  avatar.busy = true;
   const root = avatar.root;
   await tweenVec3(root, 'position', new THREE.Vector3(root.position.x, avatar.baseY, root.position.z), ANIM_MS.select * 0.7);
+  avatar.busy = false;
 }
 
 export async function playMove(avatar, toPos, ms = ANIM_MS.move) {
