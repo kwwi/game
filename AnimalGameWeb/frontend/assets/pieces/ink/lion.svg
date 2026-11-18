@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 狮：鬃毛环 + 脸 -->
+  <circle cx="64" cy="64" r="34" stroke="#1a1a1a" stroke-width="2.4" stroke-dasharray="6 5" fill="none"/>
+  <circle cx="64" cy="64" r="20" stroke="#1a1a1a" stroke-width="2.8" fill="none"/>
+  <circle cx="56" cy="60" r="2.2" fill="#1a1a1a"/>
+  <circle cx="72" cy="60" r="2.2" fill="#1a1a1a"/>
+  <path d="M60 70 C64 74, 68 74, 72 70" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  <path d="M64 30 L64 22" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M40 48 L32 42" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M88 48 L96 42" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+</svg>

@@ -1,321 +1,107 @@
+import { createApp } from './scene/App.js';
+
 const API_BASE = 'http://localhost:8080/api/games';
 const ROOMS_API = 'http://localhost:8080/api/rooms';
+const PIECE_IMG_BASE = 'assets/pieces';
+
+const PIECE_FILE = {
+  WHALE: 'ink/whale.svg',
+  PHOENIX: 'ink/phoenix.svg',
+  DRAGON: 'ink/dragon.svg',
+  ELEPHANT: 'ink/elephant.svg',
+  LION: 'ink/lion.svg',
+  TIGER: 'ink/tiger.svg',
+  LEOPARD: 'ink/leopard.svg',
+  JACKAL: 'ink/jackal.svg',
+  WOLF: 'ink/wolf.svg',
+  DOG: 'ink/dog.svg',
+  CAT: 'ink/cat.svg',
+  MOUSE: 'ink/mouse.svg'
+};
 
 let gameId = null;
 let gameState = null;
+let prevPiecesMap = null;
 let selectedPieceId = null;
-let selectedPos = null; // {r,c}
+let selectedPos = null;
 let selectedPieceType = null;
 let selectedPieceCamp = null;
 let username = '';
-let mySide = null; // 'A' or 'B'
+let mySide = null;
+let myRole = null;
+let isSolo = false;
 let pollTimer = null;
 let roomPollTimer = null;
 let tipTimer = null;
+let animBusy = false;
+let reduceMotion = false;
+let app3d = null;
+let enteringRoom = false;
+
+try {
+  reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+} catch (e) {
+  reduceMotion = false;
+}
 
 const statusEl = document.getElementById('status');
-const boardEl = document.getElementById('board');
 const usernameInput = document.getElementById('username');
 const gameIdInput = document.getElementById('gameIdInput');
-const roomPanel = document.getElementById('roomPanel');
 const roomListEl = document.getElementById('roomList');
 const btnLeave = document.getElementById('btnLeave');
 const tipEl = document.getElementById('tip');
-const pieceGhostEl = document.getElementById('pieceGhost');
+const resultBannerEl = document.getElementById('resultBanner');
+const btnMute = document.getElementById('btnMute');
+const btnMuteLobby = document.getElementById('btnMuteLobby');
+const viewLobby = document.getElementById('viewLobby');
+const viewGame = document.getElementById('viewGame');
+const gameModeLabel = document.getElementById('gameModeLabel');
+const webglRoot = document.getElementById('webgl-root');
 
-const TYPE_RANK = { WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7, LEOPARD: 6, FORTUNE: 5, WOLF: 4, DOG: 3, CAT: 2, MOUSE: 1 };
-const BOARD_GAP_PX = 4;
+const TYPE_RANK = {
+  WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7,
+  LEOPARD: 6, JACKAL: 5, WOLF: 4, DOG: 3, CAT: 2, MOUSE: 1
+};
 const BOARD_COLS_DEFAULT = 8;
 const BOARD_ROWS_DEFAULT = 7;
 
-function layoutBoardGrid() {
-  const stage = document.querySelector('.board-stage');
-  if (!stage || !boardEl) return;
-  const frame = boardEl.closest('.board-frame');
-  const cols = gameState ? (gameState.cols || BOARD_COLS_DEFAULT) : BOARD_COLS_DEFAULT;
-  const rows = gameState ? (gameState.rows || BOARD_ROWS_DEFAULT) : BOARD_ROWS_DEFAULT;
-  const pad = 8;
-  const maxW = stage.clientWidth - pad * 2;
-  const capEl = frame && frame.querySelector('.captured-panel');
-  const capturedReserve = Math.max(64, (capEl && capEl.offsetHeight > 0 ? capEl.offsetHeight : 0) + 20);
-  const framePadY = 36;
-  const maxH = Math.max(120, stage.clientHeight - framePadY - capturedReserve);
-  const gap = BOARD_GAP_PX;
-  const raw = Math.min(
-    (maxW - gap * (cols - 1)) / cols,
-    (maxH - gap * (rows - 1)) / rows
-  );
-  let cell = Number.isFinite(raw) ? Math.floor(raw) : 40;
-  cell = Math.min(88, Math.max(14, cell));
-  boardEl.style.gridTemplateColumns = `repeat(${cols}, ${cell}px)`;
-  boardEl.style.gridTemplateRows = `repeat(${rows}, ${cell}px)`;
-  boardEl.style.gap = `${gap}px`;
-  boardEl.style.width = `${cols * cell + (cols - 1) * gap}px`;
-  boardEl.style.height = `${rows * cell + (rows - 1) * gap}px`;
-  boardEl.style.setProperty('--cell', `${cell}px`);
-  const fs = Math.max(10, Math.min(20, Math.floor(cell * 0.38)));
-  boardEl.style.fontSize = `${fs}px`;
-  if (pieceGhostEl) {
-    pieceGhostEl.style.fontSize = `${Math.min(22, fs + 4)}px`;
-  }
-}
+const audio = window.AnimalAudio || {
+  unlock() {},
+  play() {},
+  playAnimal() {},
+  isMuted() { return false; },
+  toggleMuted() { return false; },
+  setMuted() {},
+  preload() {}
+};
 
-let layoutBoardTimer = null;
-function scheduleLayoutBoardGrid() {
-  if (layoutBoardTimer) cancelAnimationFrame(layoutBoardTimer);
-  layoutBoardTimer = requestAnimationFrame(() => {
-    layoutBoardTimer = null;
-    layoutBoardGrid();
-  });
-}
-
-function enterRoom(data) {
-  gameId = data.gameId;
-  gameIdInput.value = gameId;
-  gameState = data.state;
-  mySide = data.side;
-  selectedPieceId = null;
-  selectedPos = null;
-  updateStatus();
-  renderBoard();
-  startPolling();
-  if (roomPanel) roomPanel.style.display = 'none';
-}
-
-document.getElementById('btnQuickJoin').addEventListener('click', () => {
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    showTip('请先输入用户名');
-    return;
-  }
-  fetch(`${ROOMS_API}/quick-join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('无空位')))
-    .then(data => enterRoom(data))
-    .catch(err => showTip('快速加入失败: ' + (err.message || err)));
-});
-
-document.getElementById('btnJoin').addEventListener('click', () => {
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    showTip('请先输入用户名');
-    return;
-  }
-  const gid = (gameIdInput.value || '').trim();
-  if (!gid) {
-    showTip('请输入房间ID');
-    return;
-  }
-  fetch(`${ROOMS_API}/${gid}/join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
-    .then(data => enterRoom(data))
-    .catch(err => showTip('加入房间失败: ' + (err.message || err)));
-});
-
-document.getElementById('btnRefreshRooms').addEventListener('click', refreshRoomList);
-
-function refreshRoomList() {
-  fetch(ROOMS_API)
-    .then(r => r.json())
-    .then(rooms => {
-      const el = roomListEl;
-      if (!el) return;
-      if (!rooms.length) {
-        el.innerHTML = '<p>暂无房间</p>';
-        return;
-      }
-      let html = '<table class="room-table"><thead><tr><th>房间ID</th><th>玩家A</th><th>玩家B</th><th>状态</th></tr></thead><tbody>';
-      rooms.forEach(r => {
-        const shortId = r.roomId ? r.roomId.slice(0, 8) : '';
-        const a = (r.playerA || '—') + (r.roleA ? '<span class="role-' + (r.roleA === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
-        const b = (r.playerB || '—') + (r.roleB ? '<span class="role-' + (r.roleB === '红' ? 'red">(红)' : 'black">(黑)') + '</span>' : '');
-        const statusCell = r.full
-          ? '已满'
-          : `<button type="button" data-room="${r.roomId}">可加入</button>`;
-        const rowClass = r.full ? ' class="full"' : '';
-        html += '<tr' + rowClass + '><td>' + shortId + '</td><td>' + a + '</td><td>' + b + '</td><td>' + statusCell + '</td></tr>';
-      });
-      html += '</tbody></table>';
-      el.innerHTML = html;
-    })
-    .catch(() => { const el = roomListEl; if (el) el.innerHTML = '<p>加载失败</p>'; });
-}
-
-// 点击房间列表中的“可加入”按钮加入房间
-if (roomListEl) {
-  roomListEl.addEventListener('click', e => {
-    const btn = e.target.closest('button[data-room]');
+function syncMuteButton() {
+  const muted = audio.isMuted();
+  const label = muted ? '🔇' : '🔊';
+  [btnMute, btnMuteLobby].forEach(btn => {
     if (!btn) return;
-    const roomId = btn.getAttribute('data-room');
-    joinRoomById(roomId);
+    btn.textContent = label;
+    btn.setAttribute('aria-pressed', muted ? 'true' : 'false');
   });
 }
 
-function joinRoomById(roomId) {
-  username = (usernameInput.value || '').trim();
-  if (!username) {
-    alert('请先输入用户名');
-    return;
-  }
-  fetch(`${ROOMS_API}/${roomId}/join`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username })
-  })
-    .then(r => r.ok ? r.json() : Promise.reject(new Error('房间已满或不存在')))
-    .then(data => enterRoom(data))
-    .catch(err => alert('加入房间失败: ' + (err.message || err)));
+function wireMute(btn) {
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    audio.unlock();
+    audio.toggleMuted();
+    syncMuteButton();
+  });
 }
 
-document.getElementById('btnFlip').addEventListener('click', () => {
-  showTip('现在翻牌由轮到操作的玩家点击未翻面的棋子来完成。');
-});
+syncMuteButton();
+wireMute(btnMute);
+wireMute(btnMuteLobby);
+document.addEventListener('pointerdown', () => audio.unlock(), { once: false, passive: true });
 
-function showTip(msg) {
-  if (!tipEl) return;
-  tipEl.textContent = msg;
-  tipEl.style.display = 'block';
-  if (tipTimer) clearTimeout(tipTimer);
-  tipTimer = setTimeout(() => {
-    tipEl.style.display = 'none';
-  }, 2000);
-}
-
-function updateStatus() {
-  if (!gameState) {
-    statusEl.textContent = '未开始对局';
-    updateCaptured([], []);
-    return;
-  }
-  const aCamp = gameState.aCamp;
-  const bCamp = gameState.bCamp;
-  const aRoleText = aCamp === 'RED' ? 'A方(红)' : (aCamp === 'BLACK' ? 'A方(黑)' : 'A方');
-  const bRoleText = bCamp === 'RED' ? 'B方(红)' : (bCamp === 'BLACK' ? 'B方(黑)' : 'B方');
-  const aHtml = aCamp === 'RED'
-    ? `<span class="role-red">${aRoleText}</span>`
-    : aCamp === 'BLACK'
-      ? `<span class="role-black">${aRoleText}</span>`
-      : aRoleText;
-  const bHtml = bCamp === 'RED'
-    ? `<span class="role-red">${bRoleText}</span>`
-    : bCamp === 'BLACK'
-      ? `<span class="role-black">${bRoleText}</span>`
-      : bRoleText;
-  statusEl.innerHTML =
-    `房间: ${(gameId || '').slice(0, 8)} | ${aHtml} vs ${bHtml} | 当前回合: ${gameState.currentSide}` +
-    ` | 我方: ${mySide || '未加入'} | 结果: ${gameState.result}`;
-  const red = [];
-  const black = [];
-  const a = gameState.capturedByA || [];
-  const b = gameState.capturedByB || [];
-  if (gameState.aCamp === 'RED') a.forEach(p => red.push(p.type));
-  else if (gameState.aCamp === 'BLACK') a.forEach(p => black.push(p.type));
-  if (gameState.bCamp === 'RED') b.forEach(p => red.push(p.type));
-  else if (gameState.bCamp === 'BLACK') b.forEach(p => black.push(p.type));
-  updateCaptured(red, black);
-}
-
-function updateCaptured(redTypes, blackTypes) {
-  const elRed = document.getElementById('capturedRed');
-  const elBlack = document.getElementById('capturedBlack');
-  if (elRed) elRed.textContent = redTypes.length ? redTypes.map(t => toZh(t)).join(' ') : '无';
-  if (elBlack) elBlack.textContent = blackTypes.length ? blackTypes.map(t => toZh(t)).join(' ') : '无';
-}
-
-function startPolling() {
-  if (pollTimer) clearInterval(pollTimer);
-  if (!gameId) return;
-  pollTimer = setInterval(() => {
-    fetch(`${API_BASE}/${gameId}`)
-      .then(r => r.json())
-      .then(state => {
-        // 若本地还没状态或状态有变化，则更新
-        const prevResult = gameState && gameState.result;
-        const prevTurn = gameState && gameState.currentSide;
-        gameState = state;
-        // 每次轮次或结果变化时，清空本地选中，刷新界面
-        if (!prevTurn || prevTurn !== state.currentSide || prevResult !== state.result) {
-          selectedPieceId = null;
-          selectedPos = null;
-          selectedPieceType = null;
-          selectedPieceCamp = null;
-        }
-        updateStatus();
-        renderBoard();
-        updateBoardInteractivity();
-      })
-      .catch(() => {
-        // 轮询失败暂时忽略，不打断游戏
-      });
-  }, 2000);
-}
-
-// 房间列表实时刷新（只在未进入房间时）
-function startRoomPolling() {
-  if (roomPollTimer) clearInterval(roomPollTimer);
-  roomPollTimer = setInterval(() => {
-    if (!gameId) {
-      refreshRoomList();
-    }
-  }, 3000);
-}
-
-function findPieceAt(r, c) {
-  if (!gameState) return null;
-  return gameState.pieces.find(p => p.r === r && p.c === c) || null;
-}
-
-function renderBoard() {
-  boardEl.innerHTML = '';
-  if (!gameState) return;
-  const rows = gameState.rows || 7;
-  const cols = gameState.cols || 8;
-
-  for (let r = 1; r <= rows; r++) {
-    for (let c = 1; c <= cols; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-
-      if (isSpecialCell(r, c)) {
-        cell.classList.add('special');
-      }
-
-      const piece = findPieceAt(r, c);
-      if (piece) {
-        if (piece.faceDown) {
-          cell.textContent = '？';
-          cell.classList.add('face-down');
-        } else {
-          cell.textContent = toZh(piece.type);
-          cell.classList.add(piece.camp === 'RED' ? 'piece-red' : 'piece-black');
-        }
-        if (selectedPieceId != null && selectedPos &&
-            selectedPieceId === piece.id &&
-            selectedPos.r === r && selectedPos.c === c) {
-          cell.classList.add('selected');
-        }
-      }
-
-      cell.addEventListener('click', () => onCellClicked(r, c));
-
-      boardEl.appendChild(cell);
-    }
-  }
-  updateBoardInteractivity();
-  updatePieceGhost();
-  scheduleLayoutBoardGrid();
-}
-
-function isSpecialCell(r, c) {
-  return (r === 2 && c === 2) || (r === 2 && c === 7) ||
-         (r === 6 && c === 2) || (r === 6 && c === 7);
+function pieceImageUrl(type) {
+  const file = PIECE_FILE[type];
+  return file ? PIECE_IMG_BASE + '/' + file : null;
 }
 
 function toZh(type) {
@@ -327,7 +113,7 @@ function toZh(type) {
     case 'LION': return '狮';
     case 'TIGER': return '虎';
     case 'LEOPARD': return '豹';
-    case 'FORTUNE': return '财';
+    case 'JACKAL': return '豺';
     case 'WOLF': return '狼';
     case 'DOG': return '狗';
     case 'CAT': return '猫';
@@ -336,145 +122,74 @@ function toZh(type) {
   }
 }
 
-function onCellClicked(r, c) {
-  if (!gameId || !gameState) return;
-
-  if (!username || !mySide) {
-    showTip('请先输入用户名并新建/加入对局');
-    return;
-  }
-
-  if (gameState.currentSide !== mySide) {
-    showTip('当前不是你的回合');
-    return;
-  }
-
-  const piece = findPieceAt(r, c);
-  const currentSide = gameState.currentSide;
-
-  if (selectedPieceId == null) {
-    if (!piece) return;
-    if (piece.faceDown) {
-      // 点选未翻面的棋子：发起翻牌请求
-      fetch(`${API_BASE}/${gameId}/flip?username=${encodeURIComponent(username)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ r, c })
-      })
-        .then(r => r.json())
-        .then(state => {
-          gameState = state;
-          selectedPieceId = null;
-          selectedPos = null;
-          updateStatus();
-          renderBoard();
-        })
-        .catch(err => showTip('翻牌失败'));
-      return;
-    }
-    // 这里只允许选中当前阵营的棋子
-    if (!isCurrentCampPiece(piece)) {
-      showTip('不是当前阵营的棋子');
-      return;
-    }
-    selectedPieceId = piece.id;
-    selectedPos = { r, c };
-    selectedPieceType = piece.type;
-    selectedPieceCamp = piece.camp;
-    renderBoard();
-    return;
-  }
-
-  if (selectedPos && selectedPos.r === r && selectedPos.c === c) {
-    selectedPieceId = null;
-    selectedPos = null;
-    selectedPieceType = null;
-    selectedPieceCamp = null;
-    renderBoard();
-    updatePieceGhost();
-    return;
-  }
-
-  // 若点到己方另一枚明棋：切换选中
-  if (piece && !piece.faceDown && isCurrentCampPiece(piece)) {
-    selectedPieceId = piece.id;
-    selectedPos = { r, c };
-    selectedPieceType = piece.type;
-    selectedPieceCamp = piece.camp;
-    renderBoard();
-    return;
-  }
-
-  // 未翻面棋子会阻挡移动，且不可被吃
-  if (piece && piece.faceDown) {
-    showTip('未翻面棋子会阻挡移动，且不可被吃');
-    return;
-  }
-
-  // 有目标棋子（且明棋）则尝试吃子，否则普通移动
-  const to = { r, c };
-  const capture = !!piece;
-  const capturedId = capture ? piece.id : null;
-  sendMove(selectedPieceId, selectedPos, to, capture, capturedId);
+function showTip(msg) {
+  if (!tipEl) return;
+  tipEl.textContent = msg;
+  tipEl.classList.add('show');
+  clearTimeout(tipTimer);
+  tipTimer = setTimeout(() => tipEl.classList.remove('show'), 2200);
 }
 
-function isCurrentCampPiece(piece) {
-  // 根据 aCamp/bCamp 和 currentSide 判定当前阵营
-  const side = gameState.currentSide;
-  const camp = side === 'A' ? gameState.aCamp : gameState.bCamp;
-  return camp && piece.camp === camp;
+let resultBannerTimer = null;
+
+function showResultBanner(text) {
+  if (!resultBannerEl) return;
+  const card = resultBannerEl.querySelector('.banner-card');
+  if (card) card.textContent = text;
+  resultBannerEl.classList.add('show');
+  clearTimeout(resultBannerTimer);
+  resultBannerTimer = setTimeout(() => hideResultBanner(), 2800);
 }
 
-function sendMove(moverId, from, to, capture, capturedId) {
-  const body = {
-    moverId,
-    from,
-    to,
-    capture: !!capture,
-    capturedId: capturedId == null ? null : capturedId
-  };
-
-  fetch(`${API_BASE}/${gameId}/move?username=${encodeURIComponent(username)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  })
-    .then(r => r.json())
-    .then(state => {
-      gameState = state;
-      selectedPieceId = null;
-      selectedPos = null;
-      selectedPieceType = null;
-      selectedPieceCamp = null;
-      updateStatus();
-      renderBoard();
-      updatePieceGhost();
-    })
-    .catch(() => showTip('走子失败'));
+function hideResultBanner() {
+  clearTimeout(resultBannerTimer);
+  resultBannerTimer = null;
+  if (resultBannerEl) resultBannerEl.classList.remove('show');
 }
 
-function getBoardCellFromPoint(clientX, clientY) {
-  if (!boardEl || !boardEl.firstElementChild) return null;
-  const rect = boardEl.getBoundingClientRect();
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-  if (x < 0 || y < 0) return null;
-  const cs = getComputedStyle(boardEl);
-  const gap = parseFloat(cs.gap || cs.columnGap || String(BOARD_GAP_PX)) || BOARD_GAP_PX;
-  const first = boardEl.firstElementChild;
-  const cellW = first.offsetWidth;
-  const cellH = first.offsetHeight;
-  const stepX = cellW + gap;
-  const stepY = cellH + gap;
-  const cols = gameState ? (gameState.cols || BOARD_COLS_DEFAULT) : BOARD_COLS_DEFAULT;
-  const rows = gameState ? (gameState.rows || BOARD_ROWS_DEFAULT) : BOARD_ROWS_DEFAULT;
-  const c = Math.floor(x / stepX);
-  const r = Math.floor(y / stepY);
-  if (c < 0 || c >= cols || r < 0 || r >= rows) return null;
-  const xIn = x - c * stepX;
-  const yIn = y - r * stepY;
-  if (xIn >= cellW || yIn >= cellH) return null;
-  return { r: r + 1, c: c + 1 };
+function showLobby() {
+  if (viewLobby) viewLobby.classList.remove('hidden');
+  if (viewGame) viewGame.classList.add('hidden');
+  if (app3d) app3d.showLobby();
+  refreshRoomList();
+  startRoomPolling();
+}
+
+function showGameHud() {
+  if (viewLobby) viewLobby.classList.add('hidden');
+  if (viewGame) viewGame.classList.remove('hidden');
+}
+
+function requireUsername() {
+  username = (usernameInput.value || '').trim();
+  if (!username) {
+    showTip('请先输入用户名');
+    return null;
+  }
+  return username;
+}
+
+function canControlBoard() {
+  if (!gameId || !gameState || myRole !== 'PLAYER') return false;
+  if (isSolo) return true;
+  return !!mySide && gameState.currentSide === mySide;
+}
+
+function piecesToMap(pieces) {
+  const map = new Map();
+  if (!pieces) return map;
+  pieces.forEach(p => map.set(p.id, p));
+  return map;
+}
+
+function findPieceAt(r, c) {
+  if (!gameState) return null;
+  return gameState.pieces.find(p => p.r === r && p.c === c) || null;
+}
+
+function isSpecialCell(r, c) {
+  return (r === 2 && c === 2) || (r === 2 && c === 7) ||
+    (r === 6 && c === 2) || (r === 6 && c === 7);
 }
 
 function isAdjacent(from, to) {
@@ -484,6 +199,12 @@ function isAdjacent(from, to) {
 function canCapture(attackerType, defenderType) {
   if (attackerType === 'MOUSE' && ['WHALE', 'PHOENIX', 'DRAGON', 'ELEPHANT'].indexOf(defenderType) >= 0) return true;
   return (TYPE_RANK[attackerType] || 0) > (TYPE_RANK[defenderType] || 0);
+}
+
+function isCurrentCampPiece(piece) {
+  const side = gameState.currentSide;
+  const camp = side === 'A' ? gameState.aCamp : gameState.bCamp;
+  return camp && piece.camp === camp;
 }
 
 function isLegalTarget(toR, toC) {
@@ -498,86 +219,513 @@ function isLegalTarget(toR, toC) {
   return canCapture(selectedPieceType, target.type);
 }
 
-function updatePieceGhost() {
-  if (!pieceGhostEl) return;
-  if (!selectedPieceId || !selectedPieceType) {
-    pieceGhostEl.style.display = 'none';
+function updateLegalHighlights() {
+  if (!app3d) return;
+  if (selectedPieceId == null || !canControlBoard()) {
+    app3d.battle.clearHighlights();
     return;
   }
-  pieceGhostEl.textContent = toZh(selectedPieceType);
-  pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'piece-red' : 'piece-black';
+  const legal = [];
+  const danger = [];
+  const rows = gameState.rows || BOARD_ROWS_DEFAULT;
+  const cols = gameState.cols || BOARD_COLS_DEFAULT;
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) {
+      if (!isLegalTarget(r, c)) continue;
+      const t = findPieceAt(r, c);
+      if (t) danger.push({ r, c });
+      else legal.push({ r, c });
+    }
+  }
+  app3d.battle.setHighlights(legal, danger);
 }
 
-document.addEventListener('mousemove', function (e) {
-  if (selectedPieceId && selectedPieceType && pieceGhostEl) {
-    pieceGhostEl.style.display = 'block';
-    pieceGhostEl.style.left = e.clientX + 'px';
-    pieceGhostEl.style.top = e.clientY + 'px';
-    pieceGhostEl.textContent = toZh(selectedPieceType);
-    pieceGhostEl.className = selectedPieceCamp === 'RED' ? 'piece-red' : 'piece-black';
-  } else if (pieceGhostEl) {
-    pieceGhostEl.style.display = 'none';
+function syncBattleSelection() {
+  if (!app3d) return;
+  app3d.battle.setSelected(selectedPieceId);
+  updateLegalHighlights();
+}
+
+async function renderBoard(opts = {}) {
+  if (!app3d) return;
+  const prevMap = opts.prevMap || prevPiecesMap;
+  await app3d.battle.syncBoard(gameState, {
+    force: !!opts.force,
+    animate: opts.animate !== false && !reduceMotion,
+    prevMap,
+    selectedId: selectedPieceId
+  });
+  prevPiecesMap = piecesToMap(gameState && gameState.pieces);
+  syncBattleSelection();
+}
+
+async function applyBoardDiff(prevMap, state, opts = {}) {
+  if (!app3d) return;
+  if (!opts.animate || !prevMap || reduceMotion) {
+    await app3d.battle.syncBoard(state, {
+      force: true,
+      animate: false,
+      selectedId: selectedPieceId
+    });
+    prevPiecesMap = piecesToMap(state.pieces);
+    syncBattleSelection();
+    return;
   }
+
+  const nextMap = piecesToMap(state.pieces);
+  let hasChange = false;
+  nextMap.forEach((n, id) => {
+    const p = prevMap.get(id);
+    if (!p) return;
+    if ((p.faceDown && !n.faceDown) || p.r !== n.r || p.c !== n.c) hasChange = true;
+  });
+  prevMap.forEach((_, id) => { if (!nextMap.has(id)) hasChange = true; });
+
+  if (!hasChange) {
+    prevPiecesMap = nextMap;
+    syncBattleSelection();
+    return;
+  }
+
+  animBusy = true;
+  try {
+    // audio cues from diffs
+    nextMap.forEach((n, id) => {
+      const p = prevMap.get(id);
+      if (!p) return;
+      if (p.faceDown && !n.faceDown) {
+        audio.play('flip');
+        audio.playAnimal(n.type);
+      } else if (p.r !== n.r || p.c !== n.c) {
+        const victim = [...prevMap.values()].find(v => !nextMap.has(v.id) && v.r === n.r && v.c === n.c);
+        if (victim) {
+          audio.play('capture');
+          audio.playAnimal(n.type);
+        } else {
+          audio.play('move');
+        }
+      }
+    });
+    await app3d.battle.syncBoard(state, {
+      animate: true,
+      prevMap,
+      selectedId: selectedPieceId
+    });
+    prevPiecesMap = nextMap;
+  } finally {
+    animBusy = false;
+    syncBattleSelection();
+  }
+}
+
+function updateStatus(opts = {}) {
+  if (!statusEl || !gameState) return;
+  const aHtml = 'A';
+  const bHtml = 'B';
+  const roleText = myRole === 'SPECTATOR'
+    ? '观战'
+    : (isSolo ? '自弈' : (`我方: ${mySide || '—'}`));
+  statusEl.innerHTML =
+    `房间: ${(gameId || '').slice(0, 8)} | ${aHtml} vs ${bHtml} | 当前回合: ${gameState.currentSide}` +
+    ` | ${roleText} | 结果: ${gameState.result}`;
+
+  const red = [];
+  const black = [];
+  const a = gameState.capturedByA || [];
+  const b = gameState.capturedByB || [];
+  if (gameState.aCamp === 'RED') a.forEach(p => red.push(p));
+  else if (gameState.aCamp === 'BLACK') a.forEach(p => black.push(p));
+  if (gameState.bCamp === 'RED') b.forEach(p => red.push(p));
+  else if (gameState.bCamp === 'BLACK') b.forEach(p => black.push(p));
+  updateCaptured(red, black);
+
+  if (opts.prevResult && opts.prevResult !== gameState.result && gameState.result !== 'ONGOING') {
+    if (gameState.result === 'DRAW') {
+      audio.play('draw');
+      showResultBanner('平局');
+    } else if (gameState.result === 'A_WIN' || gameState.result === 'B_WIN') {
+      audio.play('win');
+      if (isSolo || myRole === 'SPECTATOR') {
+        const winner = gameState.result === 'A_WIN' ? 'A方' : 'B方';
+        showResultBanner(isSolo ? `对局结束 · ${winner}胜` : `${winner}胜利`);
+      } else {
+        const won = (gameState.result === 'A_WIN' && mySide === 'A') ||
+          (gameState.result === 'B_WIN' && mySide === 'B');
+        showResultBanner(won ? '胜利！' : (mySide ? '惜败' : gameState.result));
+      }
+    }
+  }
+
+  if (isSolo && gameState.currentSide && gameState.result === 'ONGOING') {
+    mySide = gameState.currentSide;
+  }
+}
+
+function updateCaptured(redPieces, blackPieces) {
+  renderCapturedList('capturedRed', redPieces);
+  renderCapturedList('capturedBlack', blackPieces);
+}
+
+function renderCapturedList(id, pieces) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = '';
+  if (!pieces || !pieces.length) {
+    el.innerHTML = '<span class="empty">无</span>';
+    return;
+  }
+  pieces.forEach(p => {
+    const type = typeof p === 'string' ? p : p.type;
+    const camp = typeof p === 'string' ? null : p.camp;
+    const imgUrl = pieceImageUrl(type);
+    if (imgUrl) {
+      const img = document.createElement('img');
+      img.className = 'captured-thumb' + (camp === 'RED' ? ' camp-red' : camp === 'BLACK' ? ' camp-black' : '');
+      img.src = imgUrl;
+      img.alt = toZh(type);
+      img.title = toZh(type);
+      el.appendChild(img);
+    } else {
+      const span = document.createElement('span');
+      span.textContent = toZh(type);
+      el.appendChild(span);
+    }
+  });
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  if (!gameId) return;
+  pollTimer = setInterval(() => {
+    if (animBusy) return;
+    fetch(`${API_BASE}/${gameId}`)
+      .then(r => r.json())
+      .then(state => {
+        if (animBusy) return;
+        const prevResult = gameState && gameState.result;
+        const prevTurn = gameState && gameState.currentSide;
+        const prevMap = piecesToMap(gameState && gameState.pieces);
+        gameState = state;
+        if (!prevTurn || prevTurn !== state.currentSide || prevResult !== state.result) {
+          selectedPieceId = null;
+          selectedPos = null;
+          selectedPieceType = null;
+          selectedPieceCamp = null;
+        }
+        updateStatus({ prevResult });
+        return applyBoardDiff(prevMap, state, { animate: !reduceMotion && !!prevMap });
+      })
+      .catch(() => {});
+  }, 2000);
+}
+
+function startRoomPolling() {
+  if (roomPollTimer) clearInterval(roomPollTimer);
+  roomPollTimer = setInterval(() => {
+    if (!gameId) refreshRoomList();
+  }, 3000);
+}
+
+function refreshRoomList() {
+  if (!roomListEl) return;
+  fetch(ROOMS_API)
+    .then(r => r.json())
+    .then(list => {
+      roomListEl.innerHTML = '';
+      if (!list || !list.length) {
+        roomListEl.innerHTML = '<div class="empty">暂无房间，快速加入或自己对弈</div>';
+        return;
+      }
+      list.forEach(r => {
+        const roomId = r.roomId || r.id;
+        if (!roomId) return;
+        const row = document.createElement('div');
+        row.className = 'room-row' + (r.full && !r.solo ? ' full' : '');
+        const info = document.createElement('div');
+        const badges = (r.solo ? '<span class="room-badge solo">自弈</span>' : '') +
+          (r.full ? '<span class="room-badge">满员</span>' : '');
+        info.innerHTML = `<code>${String(roomId).slice(0, 8)}</code> ${badges}<div class="empty">${r.playerA || '空'} vs ${r.playerB || '空'}</div>`;
+        const actions = document.createElement('div');
+        actions.className = 'lobby-actions';
+        if (!r.solo && !r.full) {
+          const joinBtn = document.createElement('button');
+          joinBtn.type = 'button';
+          joinBtn.textContent = (!r.hasGame && !r.playerA) ? '进入空房' : '加入';
+          joinBtn.addEventListener('click', () => joinRoomById(roomId));
+          actions.appendChild(joinBtn);
+        }
+        if (r.hasGame) {
+          const sp = document.createElement('button');
+          sp.type = 'button';
+          sp.className = 'ghost';
+          sp.textContent = '观战';
+          sp.addEventListener('click', () => spectateRoomById(roomId));
+          actions.appendChild(sp);
+        }
+        row.appendChild(info);
+        row.appendChild(actions);
+        roomListEl.appendChild(row);
+      });
+    })
+    .catch(() => {
+      roomListEl.innerHTML = '<div class="empty">无法加载房间列表</div>';
+    });
+}
+
+function postRoom(path, body) {
+  return fetch(`${ROOMS_API}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  }).then(r => r.ok ? r.json() : Promise.reject(new Error('请求失败')));
+}
+
+async function enterRoom(data) {
+  if (enteringRoom) return;
+  enteringRoom = true;
+  try {
+    gameId = data.gameId;
+    if (gameIdInput) gameIdInput.value = gameId;
+    gameState = data.state;
+    myRole = data.role || 'PLAYER';
+    isSolo = !!data.solo;
+    mySide = data.side || null;
+    if (isSolo && gameState) mySide = gameState.currentSide;
+    selectedPieceId = null;
+    selectedPos = null;
+    selectedPieceType = null;
+    selectedPieceCamp = null;
+    prevPiecesMap = null;
+    hideResultBanner();
+    if (gameModeLabel) {
+      if (myRole === 'SPECTATOR') gameModeLabel.textContent = '观战中';
+      else if (isSolo) gameModeLabel.textContent = '自己对弈';
+      else gameModeLabel.textContent = '对局中';
+    }
+
+    // Preload battle board while transition plays
+    if (app3d) {
+      await app3d.battle.syncBoard(gameState, { force: true, animate: false, selectedId: null });
+      prevPiecesMap = piecesToMap(gameState.pieces);
+      await app3d.enterBattleWithTransition();
+    }
+    showGameHud();
+    updateStatus();
+    startPolling();
+    if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
+    audio.unlock();
+  } finally {
+    enteringRoom = false;
+  }
+}
+
+function onCellAction(cell) {
+  if (!gameId || !gameState || !cell) return;
+  audio.unlock();
+  const { r, c } = cell;
+
+  if (myRole === 'SPECTATOR') {
+    showTip('观战模式不可操作棋子');
+    return;
+  }
+  if (!username || myRole !== 'PLAYER') {
+    showTip('请先从大厅加入对局');
+    return;
+  }
+  if (isSolo) mySide = gameState.currentSide;
+  if (!canControlBoard()) {
+    showTip('当前不是你的回合');
+    return;
+  }
+  if (animBusy) return;
+
+  const piece = findPieceAt(r, c);
+
+  if (selectedPieceId == null) {
+    if (!piece) return;
+    if (piece.faceDown) {
+      const prevMap = piecesToMap(gameState.pieces);
+      fetch(`${API_BASE}/${gameId}/flip?username=${encodeURIComponent(username)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ r, c })
+      })
+        .then(res => res.json())
+        .then(state => {
+          const prevResult = gameState && gameState.result;
+          gameState = state;
+          selectedPieceId = null;
+          selectedPos = null;
+          selectedPieceType = null;
+          selectedPieceCamp = null;
+          updateStatus({ prevResult });
+          return applyBoardDiff(prevMap, state, { animate: !reduceMotion });
+        })
+        .catch(() => showTip('翻牌失败'));
+      return;
+    }
+    if (!isCurrentCampPiece(piece)) {
+      showTip('不是当前阵营的棋子');
+      return;
+    }
+    selectedPieceId = piece.id;
+    selectedPos = { r, c };
+    selectedPieceType = piece.type;
+    selectedPieceCamp = piece.camp;
+    audio.play('select');
+    audio.playAnimal(piece.type);
+    syncBattleSelection();
+    return;
+  }
+
+  if (selectedPos && selectedPos.r === r && selectedPos.c === c) {
+    selectedPieceId = null;
+    selectedPos = null;
+    selectedPieceType = null;
+    selectedPieceCamp = null;
+    syncBattleSelection();
+    return;
+  }
+
+  if (piece && !piece.faceDown && isCurrentCampPiece(piece)) {
+    selectedPieceId = piece.id;
+    selectedPos = { r, c };
+    selectedPieceType = piece.type;
+    selectedPieceCamp = piece.camp;
+    audio.play('select');
+    syncBattleSelection();
+    return;
+  }
+
+  if (piece && piece.faceDown) {
+    showTip('未翻面棋子会阻挡移动，且不可被吃');
+    return;
+  }
+
+  if (!isLegalTarget(r, c)) {
+    showTip('非法落点');
+    return;
+  }
+
+  const capture = !!piece;
+  const capturedId = capture ? piece.id : null;
+  sendMove(selectedPieceId, selectedPos, { r, c }, capture, capturedId);
+}
+
+function sendMove(moverId, from, to, capture, capturedId) {
+  const body = {
+    moverId,
+    from,
+    to,
+    capture: !!capture,
+    capturedId: capturedId == null ? null : capturedId
+  };
+  const prevMap = piecesToMap(gameState.pieces);
+
+  fetch(`${API_BASE}/${gameId}/move?username=${encodeURIComponent(username)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+    .then(r => r.json())
+    .then(state => {
+      const prevResult = gameState && gameState.result;
+      gameState = state;
+      selectedPieceId = null;
+      selectedPos = null;
+      selectedPieceType = null;
+      selectedPieceCamp = null;
+      updateStatus({ prevResult });
+      return applyBoardDiff(prevMap, state, { animate: !reduceMotion });
+    })
+    .catch(() => showTip('走子失败'));
+}
+
+function joinRoomById(id) {
+  if (!requireUsername()) return;
+  postRoom(`/${id}/join`, { username })
+    .then(data => enterRoom(data))
+    .catch(err => showTip('加入失败: ' + (err.message || err)));
+}
+
+function spectateRoomById(id) {
+  if (!requireUsername()) return;
+  postRoom(`/${id}/spectate`, { username })
+    .then(data => enterRoom(data))
+    .catch(err => showTip('观战失败: ' + (err.message || err)));
+}
+
+document.getElementById('btnQuickJoin').addEventListener('click', () => {
+  audio.unlock();
+  if (!requireUsername()) return;
+  postRoom('/quick-join', { username })
+    .then(data => enterRoom(data))
+    .catch(err => showTip('快速加入失败: ' + (err.message || err)));
 });
 
-if (boardEl) {
-  boardEl.addEventListener('mousemove', function (e) {
-    if (!selectedPieceId || !gameState || gameState.currentSide !== mySide) {
-      boardEl.style.cursor = '';
-      return;
-    }
-    const cell = getBoardCellFromPoint(e.clientX, e.clientY);
-    if (!cell) {
-      boardEl.style.cursor = '';
-      return;
-    }
-    boardEl.style.cursor = isLegalTarget(cell.r, cell.c) ? 'pointer' : 'not-allowed';
-  });
-  boardEl.addEventListener('mouseleave', function () {
-    boardEl.style.cursor = '';
+const btnSolo = document.getElementById('btnSolo');
+if (btnSolo) {
+  btnSolo.addEventListener('click', () => {
+    audio.unlock();
+    if (!requireUsername()) return;
+    postRoom('/solo', { username })
+      .then(data => enterRoom(data))
+      .catch(err => showTip('自弈失败: ' + (err.message || err)));
   });
 }
 
-// 退出房间：清理状态并显示房间列表
+document.getElementById('btnJoin').addEventListener('click', () => {
+  const id = (gameIdInput.value || '').trim();
+  if (!id) return showTip('请输入房间ID');
+  joinRoomById(id);
+});
+
+document.getElementById('btnSpectateId').addEventListener('click', () => {
+  const id = (gameIdInput.value || '').trim();
+  if (!id) return showTip('请输入房间ID');
+  spectateRoomById(id);
+});
+
+document.getElementById('btnRefreshRooms').addEventListener('click', () => refreshRoomList());
+
+document.getElementById('btnFlip').addEventListener('click', () => {
+  showTip('相邻走子；高阶吃低阶；鼠可吃鲸/凤/龙/象。未翻面不可吃。');
+});
+
 if (btnLeave) {
   btnLeave.addEventListener('click', () => {
+    const leavingId = gameId;
+    const leavingUser = username;
+    if (leavingId && leavingUser) {
+      postRoom(`/${leavingId}/leave`, { username: leavingUser }).catch(() => {});
+    }
     gameId = null;
     gameState = null;
     mySide = null;
+    myRole = null;
+    isSolo = false;
     selectedPieceId = null;
     selectedPos = null;
+    selectedPieceType = null;
+    selectedPieceCamp = null;
+    prevPiecesMap = null;
+    animBusy = false;
+    hideResultBanner();
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    updateStatus();
-    boardEl.innerHTML = '';
-    scheduleLayoutBoardGrid();
-    if (roomPanel) roomPanel.style.display = 'block';
-    refreshRoomList();
+    if (app3d) {
+      app3d.battle.syncBoard(null, { force: true });
+      app3d.battle.clearHighlights();
+    }
+    showLobby();
   });
 }
 
-window.addEventListener('resize', scheduleLayoutBoardGrid);
-window.addEventListener('load', scheduleLayoutBoardGrid);
-if (typeof ResizeObserver !== 'undefined') {
-  const stageEl = document.querySelector('.board-stage');
-  if (stageEl) {
-    new ResizeObserver(() => scheduleLayoutBoardGrid()).observe(stageEl);
-  }
-}
+// Boot 3D
+app3d = createApp(webglRoot, {
+  reduceMotion,
+  onCellAction: (cell) => onCellAction(cell),
+  onHoverCell: () => {}
+});
 
-refreshRoomList();
-startRoomPolling();
-scheduleLayoutBoardGrid();
-
-function updateBoardInteractivity() {
-  if (!boardEl) return;
-  if (!gameId || !gameState || !mySide) {
-    boardEl.classList.remove('board-disabled');
-    return;
-  }
-  if (gameState.currentSide !== mySide) {
-    boardEl.classList.add('board-disabled');
-  } else {
-    boardEl.classList.remove('board-disabled');
-  }
-}
-
+showLobby();
+audio.preload();

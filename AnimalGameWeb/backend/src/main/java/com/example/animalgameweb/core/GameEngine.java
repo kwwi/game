@@ -76,7 +76,7 @@ public final class GameEngine {
         add(pool, PieceType.LION, 2);
         add(pool, PieceType.TIGER, 2);
         add(pool, PieceType.LEOPARD, 2);
-        add(pool, PieceType.FORTUNE, 2);
+        add(pool, PieceType.JACKAL, 2);
         add(pool, PieceType.WOLF, 2);
         add(pool, PieceType.DOG, 2);
         add(pool, PieceType.CAT, 2);

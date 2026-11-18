@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 狼：尖耳侧影 -->
+  <path d="M36 86 C40 58, 58 44, 78 50 C96 56, 100 78, 88 92 C74 104, 48 100, 36 86 Z" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+  <path d="M52 50 L46 28 L62 46" stroke="#1a1a1a" stroke-width="2.6" stroke-linejoin="round" fill="none"/>
+  <path d="M72 48 L78 26 L86 50" stroke="#1a1a1a" stroke-width="2.6" stroke-linejoin="round" fill="none"/>
+  <circle cx="70" cy="66" r="2" fill="#1a1a1a"/>
+  <path d="M78 76 C84 78, 90 76, 94 72" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+</svg>
