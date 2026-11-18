@@ -1,7 +1,28 @@
 import * as THREE from 'three';
+import { makeGlyphTexture } from '../textures.js';
 
 const GEO = {};
 const MAT = {};
+
+const SPIRIT = {
+  WHALE: { color: 0x3aa8e0, ei: 0.85 },
+  PHOENIX: { color: 0xff5520, ei: 1.0 },
+  DRAGON: { color: 0xe0b84a, ei: 0.9 },
+  ELEPHANT: { color: 0xc8d0c0, ei: 0.55 },
+  LION: { color: 0xf0b030, ei: 0.8 },
+  TIGER: { color: 0xe87820, ei: 0.75 },
+  LEOPARD: { color: 0x40d0e8, ei: 0.85 },
+  JACKAL: { color: 0xd44828, ei: 0.8 },
+  WOLF: { color: 0xc8d8e8, ei: 0.7 },
+  DOG: { color: 0xd4a060, ei: 0.55 },
+  CAT: { color: 0xa060d0, ei: 0.7 },
+  MOUSE: { color: 0xa898b0, ei: 0.5 }
+};
+
+const ZH = {
+  WHALE: '鲸', PHOENIX: '凤', DRAGON: '龙', ELEPHANT: '象', LION: '狮', TIGER: '虎',
+  LEOPARD: '豹', JACKAL: '豺', WOLF: '狼', DOG: '狗', CAT: '猫', MOUSE: '鼠'
+};
 
 function geo(key, factory) {
   if (!GEO[key]) GEO[key] = factory();
@@ -17,14 +38,18 @@ function campColors(camp) {
 
 function bodyMat(camp, extras = {}) {
   const c = campColors(camp);
-  const key = `body_${camp}_${extras.key || 'd'}`;
+  const spirit = SPIRIT[extras.key?.toUpperCase?.()] || SPIRIT[extras.spirit] || null;
+  const key = `body_${camp}_${extras.key || 'd'}_spirit`;
   if (!MAT[key]) {
+    const col = extras.color || (spirit && spirit.color) || c.primary;
     MAT[key] = new THREE.MeshStandardMaterial({
-      color: extras.color || c.primary,
-      emissive: extras.emissive || c.emissive,
-      emissiveIntensity: extras.ei || 0.35,
-      metalness: extras.metalness ?? 0.25,
-      roughness: extras.roughness ?? 0.55
+      color: col,
+      emissive: extras.emissive || col,
+      emissiveIntensity: extras.ei ?? (spirit ? spirit.ei : 0.55),
+      metalness: extras.metalness ?? 0.35,
+      roughness: extras.roughness ?? 0.35,
+      transparent: true,
+      opacity: extras.opacity ?? 0.92
     });
   }
   return MAT[key].clone();
@@ -156,21 +181,35 @@ function makeWolf(camp) {
   return root;
 }
 
-function makeFortune(camp) {
+function makeJackal(camp) {
   const root = baseAnimal(camp);
-  const coin = addShadow(new THREE.Mesh(
-    geo('fCoin', () => new THREE.CylinderGeometry(0.42, 0.42, 0.12, 20)),
-    bodyMat(camp, { key: 'fortune', color: 0xd4a84b, metalness: 0.8, roughness: 0.3, ei: 0.55 })
+  const mat = bodyMat(camp, { key: 'jackal', spirit: 'JACKAL', color: 0xd44828, ei: 0.85 });
+  const body = addShadow(new THREE.Mesh(geo('jBody', () => new THREE.CapsuleGeometry(0.22, 0.4, 6, 10)), mat));
+  body.position.y = 0.42;
+  body.rotation.z = Math.PI / 2;
+  body.scale.set(1, 0.9, 0.85);
+  const head = addShadow(new THREE.Mesh(geo('jHead', () => new THREE.SphereGeometry(0.2, 10, 8)), mat));
+  head.position.set(0.4, 0.52, 0);
+  head.scale.set(1.05, 0.9, 0.85);
+  const snout = addShadow(new THREE.Mesh(geo('jSnout', () => new THREE.ConeGeometry(0.09, 0.28, 8)), mat));
+  snout.rotation.z = -Math.PI / 2;
+  snout.position.set(0.62, 0.46, 0);
+  const earGeo = geo('jEar', () => new THREE.ConeGeometry(0.07, 0.22, 6));
+  const earL = addShadow(new THREE.Mesh(earGeo, mat));
+  earL.position.set(0.32, 0.74, 0.1);
+  const earR = earL.clone();
+  earR.position.z = -0.1;
+  const mane = addShadow(new THREE.Mesh(
+    geo('jMane', () => new THREE.TorusGeometry(0.16, 0.045, 6, 12)),
+    bodyMat(camp, { key: 'jmane', color: 0x8a2818, ei: 0.5 })
   ));
-  coin.position.y = 0.5;
-  coin.rotation.x = Math.PI / 2;
-  const jewel = addShadow(new THREE.Mesh(
-    geo('fJewel', () => new THREE.OctahedronGeometry(0.18, 0)),
-    accentMat(camp)
-  ));
-  jewel.position.y = 0.85;
-  root.add(coin, jewel);
-  root.userData.parts = { body: coin, head: jewel };
+  mane.position.set(0.28, 0.5, 0);
+  mane.rotation.y = Math.PI / 2;
+  const tail = addShadow(new THREE.Mesh(geo('jTail', () => new THREE.ConeGeometry(0.08, 0.4, 6)), mat));
+  tail.position.set(-0.4, 0.45, 0);
+  tail.rotation.z = Math.PI / 2.5;
+  root.add(body, head, snout, earL, earR, mane, tail);
+  root.userData.parts = { body, head, tail };
   return root;
 }
 
@@ -322,7 +361,7 @@ const BUILDERS = {
   CAT: makeCat,
   DOG: makeDog,
   WOLF: makeWolf,
-  FORTUNE: makeFortune,
+  JACKAL: makeJackal,
   LEOPARD: makeLeopard,
   TIGER: makeTigerFixed,
   LION: makeLion,
@@ -338,33 +377,40 @@ export function createCharacter(type, camp) {
   mesh.userData.type = type;
   mesh.userData.camp = camp;
   mesh.userData.faceDown = false;
-  // Name plate billboard-ish
-  const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = camp === 'RED' ? '#c44536' : '#1a2030';
-  ctx.fillRect(16, 8, 96, 48);
-  ctx.strokeStyle = '#f0d9a0';
-  ctx.lineWidth = 4;
-  ctx.strokeRect(16, 8, 96, 48);
-  ctx.fillStyle = '#fff6df';
-  ctx.font = 'bold 32px serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const zh = ({
-    WHALE: '鲸', PHOENIX: '凤', DRAGON: '龙', ELEPHANT: '象', LION: '狮', TIGER: '虎',
-    LEOPARD: '豹', FORTUNE: '财', WOLF: '狼', DOG: '狗', CAT: '猫', MOUSE: '鼠'
-  })[type] || '?';
-  ctx.fillText(zh, 64, 34);
-  const tex = new THREE.CanvasTexture(canvas);
-  const badge = new THREE.Mesh(
-    geo('badge', () => new THREE.PlaneGeometry(0.45, 0.22)),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+
+  const spirit = SPIRIT[type] || SPIRIT.MOUSE;
+  const hex = '#' + spirit.color.toString(16).padStart(6, '0');
+  const tex = new THREE.CanvasTexture(makeGlyphTexture(ZH[type] || '?', hex));
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pad = new THREE.Mesh(
+    geo('glyphPad', () => new THREE.CircleGeometry(0.38, 24)),
+    new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })
   );
-  badge.position.set(0.35, 1.05, 0.35);
-  badge.name = 'nameBadge';
-  mesh.add(badge);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.04;
+  pad.name = 'nameBadge';
+  mesh.add(pad);
+
+  // soft aura ring
+  const ring = new THREE.Mesh(
+    geo('auraRing', () => new THREE.TorusGeometry(0.42, 0.03, 6, 24)),
+    new THREE.MeshBasicMaterial({
+      color: spirit.color,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.06;
+  mesh.add(ring);
+
   return mesh;
 }
 

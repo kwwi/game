@@ -5,7 +5,7 @@
   const SFX_BASE = 'assets/sfx';
   const SAMPLE_IDS = [
     'WHALE', 'PHOENIX', 'DRAGON', 'ELEPHANT', 'LION', 'TIGER', 'LEOPARD',
-    'FORTUNE', 'WOLF', 'DOG', 'CAT', 'MOUSE',
+    'JACKAL', 'WOLF', 'DOG', 'CAT', 'MOUSE',
     'flip', 'move', 'capture', 'win', 'draw', 'select'
   ];
 
@@ -17,7 +17,7 @@
     LION: 'lion',
     TIGER: 'tiger',
     LEOPARD: 'leopard',
-    FORTUNE: 'fortune',
+    JACKAL: 'fortune',
     WOLF: 'wolf',
     DOG: 'dog',
     CAT: 'cat',
@@ -250,10 +250,9 @@
         this.noiseBurst({ dur: 0.4, vol: 0.2, filterFreq: 180, q: 0.8 });
         this.tone({ type: 'sawtooth', freq: 90, freqEnd: 50, dur: 0.45, vol: 0.14 });
         break;
-      case 'FORTUNE':
-        this.tone({ type: 'sine', freq: 880, dur: 0.12, vol: 0.14 });
-        this.tone({ type: 'sine', freq: 1175, dur: 0.14, vol: 0.12, delay: 0.1 });
-        this.tone({ type: 'sine', freq: 1568, dur: 0.18, vol: 0.1, delay: 0.2 });
+      case 'JACKAL':
+        this.tone({ type: 'sawtooth', freq: 220, freqEnd: 140, dur: 0.18, vol: 0.12 });
+        this.tone({ type: 'triangle', freq: 440, freqEnd: 320, dur: 0.16, vol: 0.1, delay: 0.08 });
         break;
       case 'FLIP':
         this.noiseBurst({ dur: 0.12, vol: 0.12, filterFreq: 2200, q: 0.7 });

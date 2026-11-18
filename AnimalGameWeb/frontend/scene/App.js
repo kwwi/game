@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { LobbyScene } from './LobbyScene.js';
 import { BattleScene } from './BattleScene.js';
 import { playEnterRoom } from './Transition.js';
@@ -15,6 +18,8 @@ export function createApp(rootEl, opts = {}) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PIXEL_CAP));
   renderer.setSize(rootEl.clientWidth || window.innerWidth, rootEl.clientHeight || window.innerHeight);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
   renderer.shadowMap.enabled = !reduceMotion;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.className = 'webgl-canvas';
@@ -22,7 +27,7 @@ export function createApp(rootEl, opts = {}) {
   rootEl.appendChild(renderer.domElement);
 
   const clock = new THREE.Clock();
-  let mode = 'lobby'; // lobby | battle | transition
+  let mode = 'lobby';
   let raf = 0;
   let disposed = false;
 
@@ -38,12 +43,27 @@ export function createApp(rootEl, opts = {}) {
   overlay.className = 'scene-transition-overlay';
   rootEl.appendChild(overlay);
 
+  const size = new THREE.Vector2(rootEl.clientWidth || window.innerWidth, rootEl.clientHeight || window.innerHeight);
+  const lobbyComposer = new EffectComposer(renderer);
+  lobbyComposer.addPass(new RenderPass(lobby.scene, lobby.camera));
+  const lobbyBloom = new UnrealBloomPass(size.clone(), reduceMotion ? 0.25 : 0.55, 0.6, 0.82);
+  lobbyComposer.addPass(lobbyBloom);
+
+  const battleComposer = new EffectComposer(renderer);
+  battleComposer.addPass(new RenderPass(battle.scene, battle.camera));
+  const battleBloom = new UnrealBloomPass(size.clone(), reduceMotion ? 0.35 : 0.85, 0.55, 0.75);
+  battleComposer.addPass(battleBloom);
+
   function resize() {
     const w = rootEl.clientWidth || window.innerWidth;
     const h = rootEl.clientHeight || window.innerHeight;
     renderer.setSize(w, h, false);
     lobby.resize(w, h);
     battle.resize(w, h);
+    lobbyComposer.setSize(w, h);
+    battleComposer.setSize(w, h);
+    lobbyBloom.setSize(w, h);
+    battleBloom.setSize(w, h);
   }
 
   function tick() {
@@ -52,12 +72,13 @@ export function createApp(rootEl, opts = {}) {
     const dt = Math.min(0.05, clock.getDelta());
     if (mode === 'lobby' || mode === 'transition') lobby.update(dt);
     if (mode === 'battle' || mode === 'transition') battle.update(dt);
-    const scene = mode === 'battle' ? battle.scene : lobby.scene;
-    const camera = mode === 'battle' ? battle.camera : lobby.camera;
+
     if (mode === 'transition' && overlay.dataset.phase === 'battle') {
-      renderer.render(battle.scene, battle.camera);
+      battleComposer.render();
+    } else if (mode === 'battle') {
+      battleComposer.render();
     } else {
-      renderer.render(scene, camera);
+      lobbyComposer.render();
     }
   }
 

@@ -2,10 +2,11 @@ import * as THREE from 'three';
 import { createCharacter, createSealedToken } from './pieces/CharacterFactory.js';
 import { tickIdle, playSelect, playDeselect, playMove, playAttackLunge, ANIM_MS } from './pieces/anims.js';
 import { playExit, pulseScreenFlash } from './pieces/exits.js';
+import { makeNoiseCanvas, makeSkyGradientCanvas } from './textures.js';
 
 const CELL = 1.15;
 const GAP = 0.08;
-const BASE_Y = 0.05;
+const BASE_Y = 0.22;
 
 function cellCenter(r, c, rows, cols) {
   const w = cols * CELL + (cols - 1) * GAP;
@@ -30,10 +31,10 @@ export class BattleScene {
     this._drag = null;
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x120c18, 0.035);
-    this.scene.background = new THREE.Color(0x140e1a);
+    this.scene.fog = new THREE.FogExp2(0x1a2848, 0.018);
+    this.scene.background = new THREE.Color(0x0c1430);
 
-    this.camera = new THREE.PerspectiveCamera(48, 1, 0.1, 120);
+    this.camera = new THREE.PerspectiveCamera(46, 1, 0.1, 260);
     this.resetCamera();
 
     this.root = new THREE.Group();
@@ -43,9 +44,10 @@ export class BattleScene {
 
     this.fxOverlay = document.getElementById('battleFxOverlay');
 
+    this._buildSkyAndClouds();
     this._buildLights();
-    this._buildBoard(this.rows, this.cols);
     this._buildArenaDecor();
+    this._buildBoard(this.rows, this.cols);
     this._bindPointer();
   }
 
@@ -55,61 +57,174 @@ export class BattleScene {
   }
 
   getDefaultCamera() {
-    return { x: 0, y: 11.5, z: 11.5 };
+    return { x: 0.8, y: 12.5, z: 13.2 };
   }
 
   resetCamera() {
     const d = this.getDefaultCamera();
     this.camera.position.set(d.x, d.y, d.z);
-    this.camera.lookAt(0, 0, 0);
+    this.camera.lookAt(0, 0.4, 0);
+  }
+
+  _buildSkyAndClouds() {
+    const skyTex = new THREE.CanvasTexture(makeSkyGradientCanvas());
+    skyTex.colorSpace = THREE.SRGBColorSpace;
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(120, 28, 18),
+      new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, depthWrite: false })
+    );
+    this.scene.add(sky);
+
+    const starN = this.reduceMotion ? 60 : 140;
+    const starPos = new Float32Array(starN * 3);
+    for (let i = 0; i < starN; i++) {
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.random() * 0.9;
+      starPos[i * 3] = Math.sin(ph) * Math.cos(th) * 90;
+      starPos[i * 3 + 1] = 20 + Math.cos(ph) * 50;
+      starPos[i * 3 + 2] = Math.sin(ph) * Math.sin(th) * 90;
+    }
+    this.scene.add(new THREE.Points(
+      new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(starPos, 3)),
+      new THREE.PointsMaterial({ color: 0xe8f0ff, size: 0.4, transparent: true, opacity: 0.8, depthWrite: false })
+    ));
+
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0xb8d0ea,
+      transparent: true,
+      opacity: 0.28,
+      depthWrite: false
+    });
+    this.clouds = new THREE.Group();
+    for (let i = 0; i < (this.reduceMotion ? 8 : 14); i++) {
+      const c = new THREE.Mesh(new THREE.SphereGeometry(5 + (i % 4), 12, 8), cloudMat);
+      c.scale.set(2.8 + (i % 3) * 0.5, 0.28, 2.0);
+      c.position.set((i - 7) * 6.5, -9.5 + (i % 3) * 0.6, -22 + (i % 5) * 4);
+      this.clouds.add(c);
+    }
+    this.scene.add(this.clouds);
+
+    // distant peaks + pagodas
+    const peakMat = new THREE.MeshStandardMaterial({ color: 0x1a2438, roughness: 0.95 });
+    for (let i = 0; i < 7; i++) {
+      const peak = new THREE.Mesh(new THREE.ConeGeometry(3 + (i % 3), 10 + i, 5), peakMat);
+      peak.position.set(-24 + i * 8, -2, -42 - (i % 3) * 4);
+      this.scene.add(peak);
+      if (i % 2 === 0) {
+        const pagoda = new THREE.Group();
+        const stone = new THREE.MeshStandardMaterial({ color: 0x2a3040, roughness: 0.8 });
+        const warm = new THREE.MeshStandardMaterial({
+          color: 0xffc070,
+          emissive: 0xff9940,
+          emissiveIntensity: 1.2
+        });
+        for (let t = 0; t < 3; t++) {
+          const tier = new THREE.Mesh(new THREE.BoxGeometry(1.4 - t * 0.25, 0.55, 1.4 - t * 0.25), stone);
+          tier.position.y = t * 0.7;
+          pagoda.add(tier);
+          const roof = new THREE.Mesh(new THREE.ConeGeometry(1.0 - t * 0.15, 0.4, 4), warm);
+          roof.position.y = t * 0.7 + 0.35;
+          pagoda.add(roof);
+        }
+        pagoda.position.copy(peak.position);
+        pagoda.position.y = 4.2;
+        pagoda.scale.setScalar(0.9);
+        this.scene.add(pagoda);
+      }
+    }
   }
 
   _buildLights() {
-    this.scene.add(new THREE.AmbientLight(0x5a4a70, 0.5));
-    const key = new THREE.DirectionalLight(0xffe2b0, 0.85);
-    key.position.set(6, 14, 8);
+    this.scene.add(new THREE.HemisphereLight(0x9ab8ff, 0x1a2030, 0.55));
+    const key = new THREE.DirectionalLight(0xffe6c0, 0.9);
+    key.position.set(8, 16, 10);
     key.castShadow = !this.reduceMotion;
     if (key.castShadow) {
       key.shadow.mapSize.set(1024, 1024);
       key.shadow.camera.near = 2;
-      key.shadow.camera.far = 40;
-      key.shadow.camera.left = -12;
-      key.shadow.camera.right = 12;
-      key.shadow.camera.top = 12;
-      key.shadow.camera.bottom = -12;
+      key.shadow.camera.far = 50;
+      key.shadow.camera.left = -14;
+      key.shadow.camera.right = 14;
+      key.shadow.camera.top = 14;
+      key.shadow.camera.bottom = -14;
     }
     this.scene.add(key);
-    const fill = new THREE.PointLight(0x66ffe0, 1.2, 28, 2);
-    fill.position.set(-6, 5, -4);
+    const fill = new THREE.PointLight(0x66d0ff, 1.0, 30, 2);
+    fill.position.set(-7, 6, -3);
     this.scene.add(fill);
-    const rim = new THREE.PointLight(0xff6688, 0.7, 22, 2);
-    rim.position.set(5, 3, 5);
+    const rim = new THREE.PointLight(0xff80a0, 0.55, 24, 2);
+    rim.position.set(6, 4, 5);
     this.scene.add(rim);
   }
 
   _buildArenaDecor() {
-    const ground = new THREE.Mesh(
-      new THREE.CircleGeometry(16, 40),
-      new THREE.MeshStandardMaterial({ color: 0x1a1422, roughness: 0.95 })
+    // Octagonal floating platform
+    const jadeTex = new THREE.CanvasTexture(makeNoiseCanvas(256, {
+      base: [22, 48, 40],
+      variance: 26,
+      crack: true,
+      goldVeins: true
+    }));
+    jadeTex.colorSpace = THREE.SRGBColorSpace;
+    const platform = new THREE.Mesh(
+      new THREE.CylinderGeometry(11.2, 11.6, 1.1, 8),
+      new THREE.MeshStandardMaterial({
+        map: jadeTex,
+        color: 0x1e3a32,
+        roughness: 0.55,
+        metalness: 0.28,
+        emissive: 0x0a1814,
+        emissiveIntensity: 0.2
+      })
     );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.08;
-    ground.receiveShadow = true;
-    this.root.add(ground);
+    platform.position.y = -0.45;
+    platform.receiveShadow = true;
+    platform.castShadow = true;
+    this.root.add(platform);
 
-    const ring = new THREE.Mesh(
-      new THREE.TorusGeometry(9.5, 0.08, 8, 48),
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(11.35, 0.12, 8, 8),
       new THREE.MeshStandardMaterial({
         color: 0xc9a45c,
         emissive: 0x664410,
-        emissiveIntensity: 0.6,
-        metalness: 0.7,
-        roughness: 0.3
+        emissiveIntensity: 0.7,
+        metalness: 0.75,
+        roughness: 0.28
       })
     );
-    ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.02;
-    this.root.add(ring);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 0.12;
+    this.root.add(rim);
+
+    // gem inlays on rim
+    const gemColors = [0xff3355, 0x44e0c0, 0x4488ff, 0xffcc44];
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const gem = new THREE.Mesh(
+        new THREE.SphereGeometry(0.18, 10, 8),
+        new THREE.MeshStandardMaterial({
+          color: gemColors[i % gemColors.length],
+          emissive: gemColors[i % gemColors.length],
+          emissiveIntensity: 0.85,
+          metalness: 0.4,
+          roughness: 0.2
+        })
+      );
+      gem.position.set(Math.cos(ang) * 11.2, 0.22, Math.sin(ang) * 11.2);
+      this.root.add(gem);
+    }
+
+    // side lantern / box props (subtle)
+    const lantern = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.4, 1.6, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xffb060,
+        emissive: 0xff8020,
+        emissiveIntensity: 0.9
+      })
+    );
+    lantern.position.set(-9.5, 0.9, 6);
+    this.root.add(lantern);
   }
 
   _buildBoard(rows, cols) {
@@ -120,62 +235,75 @@ export class BattleScene {
     this.rows = rows;
     this.cols = cols;
     this.boardGroup = new THREE.Group();
-    const baseMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2030,
-      roughness: 0.75,
-      metalness: 0.15
-    });
-    const specialMat = new THREE.MeshStandardMaterial({
-      color: 0x3a4a60,
-      emissive: 0x203040,
-      emissiveIntensity: 0.45,
-      roughness: 0.55,
-      metalness: 0.35
-    });
-    const highlightMat = new THREE.MeshStandardMaterial({
-      color: 0x44dd99,
-      emissive: 0x228866,
-      emissiveIntensity: 0.7,
+
+    const jadeA = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [18, 52, 42], variance: 18, goldVeins: true }));
+    const jadeB = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [58, 44, 24], variance: 16, goldVeins: true }));
+    jadeA.colorSpace = jadeB.colorSpace = THREE.SRGBColorSpace;
+
+    this._highlightMat = new THREE.MeshStandardMaterial({
+      color: 0x44eebb,
+      emissive: 0x22aa77,
+      emissiveIntensity: 0.85,
       transparent: true,
-      opacity: 0.85
+      opacity: 0.9
     });
-    this._highlightMat = highlightMat;
     this._dangerMat = new THREE.MeshStandardMaterial({
-      color: 0xdd4455,
-      emissive: 0x881122,
-      emissiveIntensity: 0.7,
+      color: 0xff5566,
+      emissive: 0xaa2233,
+      emissiveIntensity: 0.85,
       transparent: true,
-      opacity: 0.8
+      opacity: 0.9
     });
 
     for (let r = 1; r <= rows; r++) {
       for (let c = 1; c <= cols; c++) {
         const special = this._isSpecial(r, c);
+        const alt = (r + c) % 2 === 0;
+        const mat = new THREE.MeshStandardMaterial({
+          map: (alt ? jadeA : jadeB).clone(),
+          color: special ? 0x3a5068 : (alt ? 0x1a3d34 : 0x5a4020),
+          emissive: special ? 0x203848 : (alt ? 0x0a2018 : 0x2a1808),
+          emissiveIntensity: special ? 0.55 : 0.22,
+          roughness: 0.48,
+          metalness: 0.32
+        });
         const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(CELL * 0.94, special ? 0.28 : 0.16, CELL * 0.94),
-          (special ? specialMat : baseMat).clone()
+          new THREE.BoxGeometry(CELL * 0.92, special ? 0.32 : 0.18, CELL * 0.92),
+          mat
         );
         const p = cellCenter(r, c, rows, cols);
-        mesh.position.set(p.x, special ? 0.14 : 0.08, p.z);
+        mesh.position.set(p.x, special ? 0.2 : 0.12, p.z);
         mesh.receiveShadow = true;
         mesh.userData.cell = { r, c };
         mesh.userData.baseColor = mesh.material.color.clone();
         mesh.userData.baseEmissive = mesh.material.emissive.clone();
+        mesh.userData.baseEmissiveIntensity = mesh.material.emissiveIntensity;
         this.boardGroup.add(mesh);
         this.cellMeshes.set(`${r},${c}`, mesh);
+
+        // gold inlay frame
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(CELL * 0.96, 0.03, CELL * 0.96),
+          new THREE.MeshStandardMaterial({
+            color: 0xc9a45c,
+            emissive: 0x664410,
+            emissiveIntensity: 0.45,
+            metalness: 0.7,
+            roughness: 0.3
+          })
+        );
+        frame.position.set(p.x, 0.03, p.z);
+        this.boardGroup.add(frame);
       }
     }
     this.root.add(this.boardGroup);
 
     const rayPlane = new THREE.Mesh(
-      new THREE.PlaneGeometry(
-        cols * (CELL + GAP),
-        rows * (CELL + GAP)
-      ),
+      new THREE.PlaneGeometry(cols * (CELL + GAP), rows * (CELL + GAP)),
       new THREE.MeshBasicMaterial({ visible: false })
     );
     rayPlane.rotation.x = -Math.PI / 2;
-    rayPlane.position.y = 0.2;
+    rayPlane.position.y = 0.25;
     this.rayPlane = rayPlane;
     this.root.add(rayPlane);
   }
@@ -543,6 +671,12 @@ export class BattleScene {
   update(dt) {
     this._t += dt;
     this.avatars.forEach(av => tickIdle(av, this._t, this.reduceMotion));
+    if (this.clouds && !this.reduceMotion) {
+      this.clouds.rotation.y += dt * 0.02;
+      this.clouds.children.forEach((c, i) => {
+        c.position.x += Math.sin(this._t * 0.15 + i) * 0.004;
+      });
+    }
   }
 
   dispose() {

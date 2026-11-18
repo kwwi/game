@@ -12,7 +12,7 @@ const PIECE_FILE = {
   LION: 'ink/lion.svg',
   TIGER: 'ink/tiger.svg',
   LEOPARD: 'ink/leopard.svg',
-  FORTUNE: 'ink/fortune.svg',
+  JACKAL: 'ink/jackal.svg',
   WOLF: 'ink/wolf.svg',
   DOG: 'ink/dog.svg',
   CAT: 'ink/cat.svg',
@@ -60,7 +60,7 @@ const webglRoot = document.getElementById('webgl-root');
 
 const TYPE_RANK = {
   WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7,
-  LEOPARD: 6, FORTUNE: 5, WOLF: 4, DOG: 3, CAT: 2, MOUSE: 1
+  LEOPARD: 6, JACKAL: 5, WOLF: 4, DOG: 3, CAT: 2, MOUSE: 1
 };
 const BOARD_COLS_DEFAULT = 8;
 const BOARD_ROWS_DEFAULT = 7;
@@ -113,7 +113,7 @@ function toZh(type) {
     case 'LION': return '狮';
     case 'TIGER': return '虎';
     case 'LEOPARD': return '豹';
-    case 'FORTUNE': return '财';
+    case 'JACKAL': return '豺';
     case 'WOLF': return '狼';
     case 'DOG': return '狗';
     case 'CAT': return '猫';

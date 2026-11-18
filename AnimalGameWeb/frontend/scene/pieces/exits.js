@@ -56,7 +56,7 @@ const EXIT_COLOR = {
   LION: 0xffcc44,
   TIGER: 0xff8822,
   LEOPARD: 0xddaa44,
-  FORTUNE: 0xffe066,
+  JACKAL: 0xd44828,
   WOLF: 0x99aacc,
   DOG: 0xcc9955,
   CAT: 0xdda066,
@@ -112,20 +112,10 @@ export async function playExit(avatar, scene, screenFx, reduceMotion) {
       await tweenVec3(root, 'position', new THREE.Vector3(origin.x, -0.8, origin.z), ANIM_MS.exit * 0.85);
       break;
     }
-    case 'FORTUNE': {
-      root.rotation.y = 0;
-      const start = performance.now();
-      await new Promise(resolve => {
-        function frame(now) {
-          const u = Math.min(1, (now - start) / ANIM_MS.exit);
-          root.rotation.y += 0.4;
-          root.position.y = avatar.baseY + Math.sin(u * Math.PI) * 1.4;
-          root.scale.setScalar(1 - u);
-          if (u < 1) requestAnimationFrame(frame);
-          else resolve();
-        }
-        requestAnimationFrame(frame);
-      });
+    case 'JACKAL': {
+      const dash = origin.clone().add(new THREE.Vector3(1.8, 0.4, 0.2));
+      await tweenVec3(root, 'position', dash, ANIM_MS.exit * 0.55);
+      await tweenNumber(() => root.scale.x, v => root.scale.setScalar(v), 0.05, 200);
       break;
     }
     case 'ELEPHANT': {
@@ -152,7 +142,7 @@ export function pulseScreenFlash(overlayEl, type) {
     PHOENIX: 'rgba(255,100,40,0.35)',
     DRAGON: 'rgba(40,220,140,0.3)',
     WHALE: 'rgba(80,180,255,0.3)',
-    FORTUNE: 'rgba(255,220,80,0.28)'
+    JACKAL: 'rgba(220,70,40,0.28)'
   };
   overlayEl.style.background = colors[type] || 'rgba(200,180,120,0.18)';
   overlayEl.classList.add('fx-flash');
