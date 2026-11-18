@@ -83,7 +83,8 @@ public class GameService {
             if (s.solo) continue;
             if (s.playerA != null && s.playerB != null) continue;
             if (username.equals(s.playerA) || username.equals(s.playerB)) continue;
-            if (s.playerA != null) preferOne = e.getKey();
+            // A 或 B 任一在座都算「已有一人」（含 A 离房仅剩 B 的情况）
+            if (s.playerA != null || s.playerB != null) preferOne = e.getKey();
             else preferEmpty = e.getKey();
         }
         String roomId = preferOne != null ? preferOne : preferEmpty;
