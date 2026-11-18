@@ -179,12 +179,21 @@ public class GameService {
             return resp;
         }
 
-        if (session.playerB != null) return null;
-        session.playerB = username;
+        // 对局已存在：优先补空着的 A 位，再补 B 位（避免 A 离房后无法续上）
+        Side joinedSide;
+        if (session.playerA == null) {
+            session.playerA = username;
+            joinedSide = Side.A;
+        } else if (session.playerB == null) {
+            session.playerB = username;
+            joinedSide = Side.B;
+        } else {
+            return null;
+        }
         GameCreatedResponse resp = new GameCreatedResponse();
         resp.gameId = roomId;
         resp.state = session.engine.toGameState();
-        resp.side = Side.B;
+        resp.side = joinedSide;
         resp.role = "PLAYER";
         resp.solo = false;
         return resp;

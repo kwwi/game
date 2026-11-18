@@ -300,14 +300,14 @@ function refreshRoomList() {
         const badges = (r.solo ? '<span class="room-badge solo">自弈</span>' : '') +
           (r.full ? '<span class="room-badge">满员</span>' : '');
         let actions = '<div class="room-actions">';
-        if (!r.full && !r.solo) {
-          actions += `<button type="button" data-join="${r.roomId}">加入</button>`;
+        if (!r.solo && !r.full) {
+          const joinLabel = (!r.hasGame && !r.playerA) ? '进入空房' : '加入';
+          actions += `<button type="button" data-join="${r.roomId}">${joinLabel}</button>`;
         }
         if (r.hasGame) {
           actions += `<button type="button" class="ghost" data-spectate="${r.roomId}">观战</button>`;
         }
-        if (r.full && !r.hasGame) actions += '—';
-        if (!r.hasGame && !r.playerA) actions += `<button type="button" data-join="${r.roomId}">进入空房</button>`;
+        if (!r.hasGame && r.full) actions += '—';
         actions += '</div>';
         const rowClass = r.full && !r.solo ? ' class="full"' : '';
         html += '<tr' + rowClass + '><td>' + shortId + badges + '</td><td>' + a + '</td><td>' + b +
@@ -404,9 +404,6 @@ function updateStatus(opts) {
   statusEl.innerHTML =
     `房间: ${(gameId || '').slice(0, 8)} | ${aHtml} vs ${bHtml} | 当前回合: ${gameState.currentSide}` +
     ` | ${roleText} | 结果: ${gameState.result}`;
-  if (isSolo && gameState.currentSide) {
-    mySide = gameState.currentSide;
-  }
 
   const red = [];
   const black = [];
@@ -424,10 +421,20 @@ function updateStatus(opts) {
       showResultBanner('平局');
     } else if (gameState.result === 'A_WIN' || gameState.result === 'B_WIN') {
       audio.play('win');
-      const won = (gameState.result === 'A_WIN' && mySide === 'A') ||
-        (gameState.result === 'B_WIN' && mySide === 'B');
-      showResultBanner(won ? '胜利！' : (mySide ? '惜败' : gameState.result));
+      if (isSolo || myRole === 'SPECTATOR') {
+        const winner = gameState.result === 'A_WIN' ? 'A方' : 'B方';
+        showResultBanner(isSolo ? `对局结束 · ${winner}胜` : `${winner}胜利`);
+      } else {
+        const won = (gameState.result === 'A_WIN' && mySide === 'A') ||
+          (gameState.result === 'B_WIN' && mySide === 'B');
+        showResultBanner(won ? '胜利！' : (mySide ? '惜败' : gameState.result));
+      }
     }
+  }
+
+  // Sync after banner so solo win text is not based on the post-nextTurn side.
+  if (isSolo && gameState.currentSide && gameState.result === 'ONGOING') {
+    mySide = gameState.currentSide;
   }
 }
 
