@@ -33,10 +33,10 @@ public class AiOpponentService {
 
     private static final Logger log = LoggerFactory.getLogger(AiOpponentService.class);
     private static final Pattern ACTION_ID = Pattern.compile("\"actionId\"\\s*:\\s*(\\d+)");
+    private static final Pattern REASON = Pattern.compile("\"reason\"\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"");
 
-    private static final String SYSTEM_PROMPT =
+    private static final String SYSTEM_PROMPT_BASE =
             "你是动物棋（暗棋）AI，执 B 方。每回合只能从「合法动作列表」中选一个 actionId。\n" +
-            "只输出一行 JSON：{\"actionId\":数字}，不要解释。\n" +
             "\n" +
             "规则摘要：\n" +
             "- 棋盘 7行×8列，坐标 (r,c) 均从 1 起。\n" +
@@ -52,6 +52,14 @@ public class AiOpponentService {
             "- 开局可适度翻牌探信息；「行」格附近谨慎。\n" +
             "- 信息不足时优先安全走子或翻低风险格。";
 
+    private static final String SYSTEM_PROMPT_BRIEF =
+            SYSTEM_PROMPT_BASE + "\n\n只输出一行 JSON：{\"actionId\":数字}，不要解释。";
+
+    private static final String SYSTEM_PROMPT_REASON =
+            SYSTEM_PROMPT_BASE +
+            "\n\n输出一行 JSON：{\"actionId\":数字,\"reason\":\"一两句中文理由\"}。" +
+            "reason 简述为何选该步，勿输出其它文字。";
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final Random rng = new Random();
     private final RestTemplate restTemplate;
@@ -65,6 +73,14 @@ public class AiOpponentService {
     @Value("${deepseek.model:deepseek-chat}")
     private String model;
 
+    /** 详细日志：完整 system/user prompt、原始回复、所选动作 */
+    @Value("${deepseek.log-detail:false}")
+    private boolean logDetail;
+
+    /** 是否向模型索要推理理由，并在日志/接口中展示 */
+    @Value("${deepseek.show-reasoning:false}")
+    private boolean showReasoning;
+
     public AiOpponentService(@Value("${deepseek.timeout-ms:12000}") int timeoutMs) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Math.min(5000, timeoutMs));
@@ -72,46 +88,124 @@ public class AiOpponentService {
         this.restTemplate = new RestTemplate(factory);
     }
 
-    /** AI 走一步并 nextTurn；若无动作或已结束则不动。 */
-    public void playTurn(GameEngine engine) {
-        if (engine == null) return;
-        if (engine.getResult() != GameResult.ONGOING) return;
-        if (engine.getCurrentSide() != Side.B) return;
+    public boolean isShowReasoning() {
+        return showReasoning;
+    }
+
+    public boolean isLogDetail() {
+        return logDetail;
+    }
+
+    /** AI 走一步并 nextTurn；返回本回合决策摘要。 */
+    public TurnResult playTurn(GameEngine engine) {
+        TurnResult result = new TurnResult();
+        result.reasoningEnabled = showReasoning;
+        result.logDetailEnabled = logDetail;
+
+        if (engine == null) return result;
+        if (engine.getResult() != GameResult.ONGOING) return result;
+        if (engine.getCurrentSide() != Side.B) return result;
 
         List<LegalAction> actions = listLegalActions(engine);
         if (actions.isEmpty()) {
-            log.warn("AI has no legal actions");
-            return;
+            log.warn("[AI] no legal actions");
+            result.source = "none";
+            return result;
         }
 
-        int chosen = pickActionId(engine, actions);
+        Pick pick = pickAction(engine, actions);
+        int chosen = pick.actionId;
         if (chosen < 0 || chosen >= actions.size()) {
             chosen = heuristicPick(actions);
+            pick.source = "heuristic-fallback";
+            pick.reason = "模型返回越界，改用启发式";
         }
-        applyAction(engine, actions.get(chosen));
+
+        LegalAction action = actions.get(chosen);
+        result.actionId = chosen;
+        result.chosenAction = action.label;
+        result.source = pick.source;
+        result.reason = pick.reason;
+        result.modelReasoning = pick.modelReasoning;
+        result.rawResponse = pick.rawResponse;
+
+        if (logDetail || showReasoning) {
+            log.info("[AI] chose #{} {} source={} reason={}",
+                    chosen, action.label, pick.source,
+                    pick.reason != null ? pick.reason : "-");
+            if (showReasoning && pick.modelReasoning != null && !pick.modelReasoning.isEmpty()) {
+                log.info("[AI] model reasoning:\n{}", pick.modelReasoning);
+            }
+        } else {
+            log.info("[AI] chose #{} {}", chosen, action.label);
+        }
+
+        applyAction(engine, action);
         engine.nextTurn();
+        result.applied = true;
+        return result;
     }
 
-    private int pickActionId(GameEngine engine, List<LegalAction> actions) {
+    private Pick pickAction(GameEngine engine, List<LegalAction> actions) {
+        Pick pick = new Pick();
         if (apiKey == null || apiKey.trim().isEmpty()) {
-            log.info("DeepSeek API key missing; using heuristic");
-            return heuristicPick(actions);
+            log.info("[AI] DeepSeek API key missing; using heuristic");
+            pick.actionId = heuristicPick(actions);
+            pick.source = "heuristic";
+            pick.reason = "未配置 API Key，启发式选步";
+            return pick;
         }
         try {
+            String system = showReasoning ? SYSTEM_PROMPT_REASON : SYSTEM_PROMPT_BRIEF;
             String user = buildUserPrompt(engine, actions);
-            String content = callDeepSeek(user);
-            Integer id = parseActionId(content);
-            if (id != null && id >= 0 && id < actions.size()) {
-                return id;
+            if (logDetail) {
+                log.info("[AI] ===== SYSTEM PROMPT =====\n{}", system);
+                log.info("[AI] ===== USER PROMPT =====\n{}", user);
             }
-            log.warn("DeepSeek returned invalid actionId: {}", content);
+
+            DeepSeekReply reply = callDeepSeek(system, user);
+            pick.rawResponse = reply.rawBody;
+            pick.modelReasoning = reply.reasoningContent;
+            pick.reason = parseReason(reply.content);
+            if ((pick.reason == null || pick.reason.isEmpty()) && reply.reasoningContent != null) {
+                pick.reason = truncate(reply.reasoningContent, 200);
+            }
+
+            if (logDetail) {
+                log.info("[AI] ===== RAW API BODY =====\n{}", reply.rawBody);
+                log.info("[AI] ===== MESSAGE CONTENT =====\n{}", reply.content);
+                if (reply.reasoningContent != null && !reply.reasoningContent.isEmpty()) {
+                    log.info("[AI] ===== REASONING_CONTENT =====\n{}", reply.reasoningContent);
+                }
+            }
+
+            Integer id = parseActionId(reply.content);
+            if (id != null && id >= 0 && id < actions.size()) {
+                pick.actionId = id;
+                pick.source = "deepseek";
+                if (pick.reason == null || pick.reason.isEmpty()) {
+                    pick.reason = "模型选中: " + actions.get(id).label;
+                }
+                return pick;
+            }
+            log.warn("[AI] invalid actionId from model: {}", reply.content);
+            pick.actionId = heuristicPick(actions);
+            pick.source = "heuristic-fallback";
+            pick.reason = "模型 actionId 无效，启发式选步";
+            return pick;
         } catch (Exception e) {
-            log.warn("DeepSeek call failed: {}", e.toString());
+            log.warn("[AI] DeepSeek call failed: {}", e.toString());
+            if (logDetail) {
+                log.warn("[AI] failure detail", e);
+            }
+            pick.actionId = heuristicPick(actions);
+            pick.source = "heuristic-fallback";
+            pick.reason = "调用失败: " + e.getMessage();
+            return pick;
         }
-        return heuristicPick(actions);
     }
 
-    private String callDeepSeek(String userPrompt) throws Exception {
+    private DeepSeekReply callDeepSeek(String systemPrompt, String userPrompt) throws Exception {
         String url = baseUrl.replaceAll("/$", "") + "/chat/completions";
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
@@ -127,7 +221,7 @@ public class AiOpponentService {
         List<Map<String, String>> messages = new ArrayList<>();
         Map<String, String> sys = new HashMap<>();
         sys.put("role", "system");
-        sys.put("content", SYSTEM_PROMPT);
+        sys.put("content", systemPrompt);
         messages.add(sys);
         Map<String, String> user = new HashMap<>();
         user.put("role", "user");
@@ -137,12 +231,21 @@ public class AiOpponentService {
 
         ResponseEntity<String> resp = restTemplate.postForEntity(
                 url, new HttpEntity<>(body, headers), String.class);
-        JsonNode root = mapper.readTree(resp.getBody());
-        JsonNode content = root.path("choices").path(0).path("message").path("content");
+        String raw = resp.getBody();
+        JsonNode root = mapper.readTree(raw);
+        JsonNode message = root.path("choices").path(0).path("message");
+        JsonNode content = message.path("content");
         if (content.isMissingNode() || content.isNull()) {
             throw new IllegalStateException("empty DeepSeek content");
         }
-        return content.asText();
+        DeepSeekReply reply = new DeepSeekReply();
+        reply.rawBody = raw;
+        reply.content = content.asText();
+        JsonNode reasoning = message.path("reasoning_content");
+        if (!reasoning.isMissingNode() && !reasoning.isNull()) {
+            reply.reasoningContent = reasoning.asText();
+        }
+        return reply;
     }
 
     private Integer parseActionId(String content) {
@@ -158,6 +261,32 @@ public class AiOpponentService {
             // fall through
         }
         return null;
+    }
+
+    private String parseReason(String content) {
+        if (content == null) return null;
+        try {
+            JsonNode node = mapper.readTree(content.trim());
+            if (node.has("reason") && !node.get("reason").isNull()) {
+                return node.get("reason").asText();
+            }
+        } catch (Exception ignored) {
+            Matcher m = REASON.matcher(content);
+            if (m.find()) {
+                return unescapeJson(m.group(1));
+            }
+        }
+        return null;
+    }
+
+    private static String unescapeJson(String s) {
+        return s.replace("\\\"", "\"").replace("\\n", "\n").replace("\\\\", "\\");
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return null;
+        String t = s.replace('\n', ' ').trim();
+        return t.length() <= max ? t : t.substring(0, max) + "…";
     }
 
     private String buildUserPrompt(GameEngine engine, List<LegalAction> actions) {
@@ -188,7 +317,11 @@ public class AiOpponentService {
         for (int i = 0; i < actions.size(); i++) {
             sb.append(i).append(". ").append(actions.get(i).label).append('\n');
         }
-        sb.append("\n只回复：{\"actionId\":0}");
+        if (showReasoning) {
+            sb.append("\n只回复：{\"actionId\":0,\"reason\":\"…\"}");
+        } else {
+            sb.append("\n只回复：{\"actionId\":0}");
+        }
         return sb.toString();
     }
 
@@ -273,13 +406,13 @@ public class AiOpponentService {
     private void applyAction(GameEngine engine, LegalAction action) {
         if (action.kind == Kind.FLIP) {
             if (engine.flipAt(action.r, action.c) == null) {
-                log.warn("AI FLIP failed at ({},{})", action.r, action.c);
+                log.warn("[AI] FLIP failed at ({},{})", action.r, action.c);
             }
             return;
         }
         if (action.move != null) {
             if (!engine.applyMove(action.move)) {
-                log.warn("AI MOVE/CAPTURE failed: {}", action.label);
+                log.warn("[AI] MOVE/CAPTURE failed: {}", action.label);
             }
         }
     }
@@ -293,5 +426,31 @@ public class AiOpponentService {
         int c;
         Move move;
         int captureRank;
+    }
+
+    private static final class Pick {
+        int actionId = -1;
+        String source;
+        String reason;
+        String modelReasoning;
+        String rawResponse;
+    }
+
+    private static final class DeepSeekReply {
+        String rawBody;
+        String content;
+        String reasoningContent;
+    }
+
+    public static final class TurnResult {
+        public boolean applied;
+        public boolean reasoningEnabled;
+        public boolean logDetailEnabled;
+        public Integer actionId;
+        public String chosenAction;
+        public String source;
+        public String reason;
+        public String modelReasoning;
+        public String rawResponse;
     }
 }

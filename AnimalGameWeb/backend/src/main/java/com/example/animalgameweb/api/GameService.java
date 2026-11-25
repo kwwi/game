@@ -375,23 +375,42 @@ public class GameService {
     }
 
     /** 人机对弈：在人类落子渲染完成并由前端延迟后，请求 AI 走一步 */
-    public GameState aiTurn(String gameId, String username) {
+    public AiTurnResponse aiTurn(String gameId, String username) {
         GameSession session = rooms.get(gameId);
         if (session == null || session.engine == null || username == null) return null;
-        if (!session.vsAi) return session.engine.toGameState();
-        if (!username.equals(session.playerA)) return session.engine.toGameState();
-        if (session.engine.getResult() != com.example.animalgameweb.core.GameResult.ONGOING) {
-            return session.engine.toGameState();
+        AiTurnResponse resp = new AiTurnResponse();
+        resp.reasoningEnabled = aiOpponent.isShowReasoning();
+        resp.logDetailEnabled = aiOpponent.isLogDetail();
+        if (!session.vsAi || !username.equals(session.playerA)) {
+            resp.state = session.engine.toGameState();
+            return resp;
         }
-        if (session.engine.getCurrentSide() != Side.B) {
-            return session.engine.toGameState();
+        if (session.engine.getResult() != com.example.animalgameweb.core.GameResult.ONGOING
+                || session.engine.getCurrentSide() != Side.B) {
+            resp.state = session.engine.toGameState();
+            return resp;
         }
         try {
-            aiOpponent.playTurn(session.engine);
+            AiOpponentService.TurnResult turn = aiOpponent.playTurn(session.engine);
+            if (turn != null) {
+                resp.applied = turn.applied;
+                resp.actionId = turn.actionId;
+                resp.chosenAction = turn.chosenAction;
+                resp.source = turn.source;
+                if (aiOpponent.isShowReasoning()) {
+                    resp.reason = turn.reason;
+                    resp.modelReasoning = turn.modelReasoning;
+                }
+            }
         } catch (Exception e) {
             // keep game playable even if AI crashes
+            resp.source = "error";
+            if (aiOpponent.isShowReasoning()) {
+                resp.reason = e.getMessage();
+            }
         }
-        return session.engine.toGameState();
+        resp.state = session.engine.toGameState();
+        return resp;
     }
 
     /**
@@ -445,6 +464,18 @@ public class GameService {
     public static final class FlipRequest {
         public int r;
         public int c;
+    }
+
+    public static final class AiTurnResponse {
+        public GameState state;
+        public boolean applied;
+        public boolean reasoningEnabled;
+        public boolean logDetailEnabled;
+        public Integer actionId;
+        public String chosenAction;
+        public String source;
+        public String reason;
+        public String modelReasoning;
     }
 
     public static final class RoomInfo {

@@ -23,6 +23,17 @@ export DEEPSEEK_API_KEY=sk-你的密钥
 
 也可在 `backend/src/main/resources/application.properties` 中设置 `deepseek.api-key=`（勿把密钥提交进仓库）。未配置时人机模式仍可用启发式走子。
 
+AI 推理日志开关（同文件）：
+
+```properties
+# 控制台打印完整 prompt / 原始回复 / 所选动作
+deepseek.log-detail=true
+# 要求模型返回 reason，并在接口与页面提示中展示
+deepseek.show-reasoning=true
+```
+
+均为 `false` 时仅保留简要落子日志。改完需重启后端。
+
 3. 使用 Maven 启动 Spring Boot 应用（第一次运行会自动下载依赖）：
 
 ```bash

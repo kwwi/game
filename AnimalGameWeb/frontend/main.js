@@ -50,6 +50,13 @@ const viewLobby = document.getElementById('viewLobby');
 const viewGame = document.getElementById('viewGame');
 const gameModeLabel = document.getElementById('gameModeLabel');
 const boardEl = document.getElementById('board');
+const aiReasonPanel = document.getElementById('aiReasonPanel');
+const aiReasonSource = document.getElementById('aiReasonSource');
+const aiReasonStatus = document.getElementById('aiReasonStatus');
+const aiReasonResult = document.getElementById('aiReasonResult');
+const aiReasonBody = document.getElementById('aiReasonBody');
+
+let aiReasoningUiEnabled = false;
 
 const TYPE_RANK = {
   WHALE: 12, PHOENIX: 11, DRAGON: 10, ELEPHANT: 9, LION: 8, TIGER: 7,
@@ -140,8 +147,81 @@ function showLobby() {
   document.body.classList.add('mode-lobby');
   if (viewLobby) viewLobby.classList.remove('hidden');
   if (viewGame) viewGame.classList.add('hidden');
+  hideAiReasonPanel();
   refreshRoomList();
   startRoomPolling();
+}
+
+function hideAiReasonPanel() {
+  aiReasoningUiEnabled = false;
+  if (!aiReasonPanel) return;
+  aiReasonPanel.classList.add('hidden');
+  if (aiReasonStatus) {
+    aiReasonStatus.textContent = '';
+    aiReasonStatus.classList.remove('thinking');
+  }
+  if (aiReasonSource) aiReasonSource.textContent = '';
+  if (aiReasonResult) {
+    aiReasonResult.textContent = '';
+    aiReasonResult.classList.add('hidden');
+  }
+  if (aiReasonBody) {
+    aiReasonBody.textContent = '';
+    aiReasonBody.classList.add('hidden');
+  }
+}
+
+function ensureAiReasonPanelVisible() {
+  if (!aiReasonPanel || !isVsAi) return;
+  aiReasonPanel.classList.remove('hidden');
+}
+
+function setAiReasonThinking() {
+  if (!isVsAi) return;
+  ensureAiReasonPanelVisible();
+  if (aiReasonStatus) {
+    aiReasonStatus.textContent = '正在思考局面与候选着法…';
+    aiReasonStatus.classList.add('thinking');
+  }
+  if (aiReasonSource) aiReasonSource.textContent = '';
+  if (aiReasonResult) aiReasonResult.classList.add('hidden');
+  if (aiReasonBody) aiReasonBody.classList.add('hidden');
+}
+
+function renderAiReasonPayload(payload) {
+  if (!payload) return;
+  if (payload.reasoningEnabled) aiReasoningUiEnabled = true;
+  if (!isVsAi || !aiReasoningUiEnabled) {
+    if (aiReasonPanel) aiReasonPanel.classList.add('hidden');
+    return;
+  }
+  ensureAiReasonPanelVisible();
+  if (aiReasonStatus) {
+    aiReasonStatus.classList.remove('thinking');
+    aiReasonStatus.textContent = payload.applied === false
+      ? '本回合未落子'
+      : '本回合推理完成';
+  }
+  if (aiReasonSource) {
+    const src = payload.source || '';
+    aiReasonSource.textContent = src ? `来源: ${src}` : '';
+  }
+  if (aiReasonResult) {
+    const action = payload.chosenAction || '';
+    const id = payload.actionId != null ? `#${payload.actionId} ` : '';
+    aiReasonResult.textContent = action ? `结果：${id}${action}` : '结果：—';
+    aiReasonResult.classList.toggle('hidden', !action);
+  }
+  if (aiReasonBody) {
+    const parts = [];
+    if (payload.reason) parts.push(payload.reason);
+    if (payload.modelReasoning && payload.modelReasoning !== payload.reason) {
+      parts.push(payload.modelReasoning);
+    }
+    const text = parts.join('\n\n').trim();
+    aiReasonBody.textContent = text || '（模型未返回详细理由）';
+    aiReasonBody.classList.toggle('hidden', !text);
+  }
 }
 
 function showGameHud() {
@@ -847,6 +927,15 @@ async function enterRoom(data) {
     startPolling();
     if (roomPollTimer) { clearInterval(roomPollTimer); roomPollTimer = null; }
     audio.unlock();
+    if (isVsAi) {
+      ensureAiReasonPanelVisible();
+      if (aiReasonStatus) {
+        aiReasonStatus.textContent = '人机对弈已开始；开启 show-reasoning 后将展示推理。';
+        aiReasonStatus.classList.remove('thinking');
+      }
+    } else {
+      hideAiReasonPanel();
+    }
     scheduleAiTurnIfNeeded();
   } finally {
     enteringRoom = false;
@@ -1001,6 +1090,7 @@ function scheduleAiTurnIfNeeded() {
   if (gameState.currentSide !== 'B') return;
   if (myRole !== 'PLAYER') return;
   showTip('AI 思考中…');
+  setAiReasonThinking();
   updateStatus();
   aiTurnTimer = setTimeout(() => {
     aiTurnTimer = null;
@@ -1018,13 +1108,29 @@ function requestAiTurn() {
   const prevMap = piecesToMap(gameState.pieces);
   actionPending = true;
   showTip('AI 思考中…');
+  setAiReasonThinking();
   fetch(`${API_BASE}/${gameId}/ai-turn?username=${encodeURIComponent(username)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' }
   })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('AI 回合失败')))
-    .then(state => applyServerState(prevMap, state, { scheduleAi: false }))
-    .catch(err => showTip(err.message || 'AI 回合失败'))
+    .then(async (payload) => {
+      const state = payload && payload.state ? payload.state : payload;
+      renderAiReasonPayload(payload);
+      if (payload && payload.reasoningEnabled && payload.reason) {
+        showTip(`AI：${payload.reason}`);
+      } else if (payload && payload.chosenAction) {
+        showTip(`AI：${payload.chosenAction}`);
+      }
+      await applyServerState(prevMap, state, { scheduleAi: false });
+    })
+    .catch(err => {
+      showTip(err.message || 'AI 回合失败');
+      if (aiReasonStatus) {
+        aiReasonStatus.classList.remove('thinking');
+        aiReasonStatus.textContent = err.message || 'AI 回合失败';
+      }
+    })
     .finally(() => {
       actionPending = false;
       updateBoardInteractivity();
@@ -1117,6 +1223,7 @@ if (btnLeave) {
     actionPending = false;
     clearAiTurnTimer();
     endDrag();
+    hideAiReasonPanel();
     boardBuilt = false;
     if (boardEl) boardEl.innerHTML = '';
     hideResultBanner();

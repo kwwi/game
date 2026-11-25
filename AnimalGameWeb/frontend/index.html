@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>动物棋 · 玉盘对决</title>
-    <link rel="stylesheet" href="styles.css?v=piece-ai-delay" />
+    <link rel="stylesheet" href="styles.css?v=ai-reason-panel" />
 </head>
 <body class="mode-lobby">
     <div class="app">
@@ -74,6 +74,16 @@
                 </div>
             </main>
 
+            <aside id="aiReasonPanel" class="ai-reason-panel glass hidden" aria-live="polite">
+                <div class="ai-reason-head">
+                    <strong>AI 推理</strong>
+                    <span id="aiReasonSource" class="ai-reason-source"></span>
+                </div>
+                <div id="aiReasonStatus" class="ai-reason-status">等待 AI 回合…</div>
+                <div id="aiReasonResult" class="ai-reason-result hidden"></div>
+                <div id="aiReasonBody" class="ai-reason-body hidden"></div>
+            </aside>
+
             <div class="captured-panel glass floating-captured">
                 <div class="captured-group camp-red-label">
                     <div>红方被吃</div>
@@ -91,6 +101,6 @@
     <div id="resultBanner" aria-live="polite"><div class="banner-card"></div></div>
 
     <script src="audio.js"></script>
-    <script type="module" src="main.js?v=piece-ai-delay"></script>
+    <script type="module" src="main.js?v=ai-reason-panel"></script>
 </body>
 </html>
