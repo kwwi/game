@@ -15,13 +15,21 @@
 cd AnimalGameWeb/backend
 ```
 
-2. 使用 Maven 启动 Spring Boot 应用（第一次运行会自动下载依赖）：
+2. （可选）人机对弈需配置 DeepSeek API Key：
+
+```bash
+export DEEPSEEK_API_KEY=sk-你的密钥
+```
+
+也可在 `backend/src/main/resources/application.properties` 中设置 `deepseek.api-key=`（勿把密钥提交进仓库）。未配置时人机模式仍可用启发式走子。
+
+3. 使用 Maven 启动 Spring Boot 应用（第一次运行会自动下载依赖）：
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
-3. 启动成功后，后端服务运行在：
+4. 启动成功后，后端服务运行在：
 
 ```text
 http://localhost:8080
@@ -29,9 +37,10 @@ http://localhost:8080
 
 主要接口（供前端调用）：
 
-- `POST /api/games`：新建一盘对局，返回 `gameId` 和初始 `GameState`
+- `POST /api/rooms/solo`：自己对弈
+- `POST /api/rooms/vs-ai`：人机对弈（玩家 A，DeepSeek 执 B）
 - `GET /api/games/{id}`：获取当前对局状态
-- `POST /api/games/{id}/flip`：随机翻一张未翻面的棋子
+- `POST /api/games/{id}/flip`：翻指定格未翻面棋子
 - `POST /api/games/{id}/move`：提交一步走子（由后端判定是否合法并更新状态）
 
 ---
@@ -58,7 +67,7 @@ http://localhost:3000/index.html
 
 确保后端服务已在 `http://localhost:8080` 运行，此时你可以在页面上：
 
-- 点击“新建对局”创建一盘新棋，并看到随机布局的 7×8 棋盘；
-- 点击“随机翻牌”让后端随机翻开一个未翻面的棋子；
-- 点击棋盘格：先选中当前阵营已翻开的棋子，再点目标格，前端会把走子请求发送给后端，由后端根据游戏规则处理并返回最新棋盘状态。
+- 输入用户名后点击「自己对弈」或「人机对弈」开局；
+- 点击未翻开棋翻牌；先选中已翻开己方棋，再点相邻目标格走子/吃子；
+- 「人机对弈」中你固定执 A，对手回合由后端调用 DeepSeek（失败则启发式）自动落子。
 

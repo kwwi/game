@@ -3,30 +3,21 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>动物棋 · 魔幻沙盘</title>
-    <link rel="stylesheet" href="styles.css" />
-    <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-      }
-    }
-    </script>
+    <title>动物棋 · 玉盘对决</title>
+    <link rel="stylesheet" href="styles.css?v=piece-ai-delay" />
 </head>
 <body class="mode-lobby">
-    <div id="webgl-root" aria-hidden="true"></div>
-    <div id="battleFxOverlay" class="battle-fx-overlay" aria-hidden="true"></div>
-
-    <div class="app hud">
+    <div class="app">
         <!-- 大厅 -->
         <section id="viewLobby" class="view view-lobby">
             <header class="lobby-hero">
                 <div class="brand-block">
                     <h1>动物棋</h1>
-                    <p class="brand-sub">雾林城堡 · 沙盘对决</p>
+                    <p class="brand-sub">雾林玉盘 · 贴图对决</p>
                 </div>
-                <button type="button" id="btnMuteLobby" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
+                <div class="top-actions">
+                    <button type="button" id="btnMuteLobby" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
+                </div>
             </header>
 
             <div class="lobby-card glass">
@@ -38,6 +29,7 @@
                 <div class="lobby-actions">
                     <button id="btnQuickJoin" type="button">快速加入</button>
                     <button id="btnSolo" type="button" class="accent">自己对弈</button>
+                    <button id="btnVsAi" type="button" class="accent">人机对弈</button>
                 </div>
                 <div class="lobby-join-id">
                     <label>房间ID
@@ -57,7 +49,7 @@
             </div>
         </section>
 
-        <!-- 对局 HUD -->
+        <!-- 对局 -->
         <section id="viewGame" class="view view-game hidden">
             <header class="app-controls game-header glass">
                 <div class="brand-row">
@@ -75,18 +67,23 @@
                     <span id="status">未连接</span>
                 </div>
             </header>
+
+            <main class="board-stage">
+                <div class="board-frame">
+                    <div id="board" class="board" aria-label="棋盘"></div>
+                </div>
+            </main>
+
             <div class="captured-panel glass floating-captured">
-                <div class="captured-group">
+                <div class="captured-group camp-red-label">
                     <div>红方被吃</div>
                     <div id="capturedRed" class="captured-icons"><span class="empty">无</span></div>
                 </div>
-                <div class="captured-group">
+                <div class="captured-group camp-black-label">
                     <div>黑方被吃</div>
                     <div id="capturedBlack" class="captured-icons"><span class="empty">无</span></div>
                 </div>
             </div>
-            <!-- keep a hidden board stub for any legacy queries -->
-            <div id="board" class="sr-only" aria-hidden="true"></div>
         </section>
     </div>
 
@@ -94,6 +91,6 @@
     <div id="resultBanner" aria-live="polite"><div class="banner-card"></div></div>
 
     <script src="audio.js"></script>
-    <script type="module" src="main.js"></script>
+    <script type="module" src="main.js?v=piece-ai-delay"></script>
 </body>
 </html>

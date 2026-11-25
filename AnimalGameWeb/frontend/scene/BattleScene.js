@@ -1,12 +1,15 @@
 import * as THREE from 'three';
-import { createCharacter, createSealedToken } from './pieces/CharacterFactory.js';
+import { createCharacter, createSealedToken, preloadSpiritModels } from './pieces/CharacterFactory.js';
 import { tickIdle, playSelect, playDeselect, playMove, playAttackLunge, ANIM_MS } from './pieces/anims.js';
 import { playExit, pulseScreenFlash } from './pieces/exits.js';
 import { makeNoiseCanvas, makeSkyGradientCanvas, makeNebulaCanvas, makeSoftCircleSprite } from './textures.js';
+import { preloadBoardModels, cloneBoardAsset, fitBoardAsset, getBoardSource } from './BoardAssets.js';
 
 const CELL = 1.15;
 const GAP = 0.08;
 const BASE_Y = 0.22;
+const BOARD_SPAN = 8 * CELL + 7 * GAP;
+const PLATFORM_SPAN = BOARD_SPAN + 8.5;
 
 function cellCenter(r, c, rows, cols) {
   const w = cols * CELL + (cols - 1) * GAP;
@@ -213,6 +216,32 @@ export class BattleScene {
   _buildArenaDecor() {
     this.platformRoot = new THREE.Group();
     this.root.add(this.platformRoot);
+    this._useGlbPlatform = false;
+
+    // Soft underside glow (kept with both procedural + GLB platform)
+    const underGlow = new THREE.Mesh(
+      new THREE.TorusGeometry(10.2, 0.35, 8, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0x88c8ff,
+        transparent: true,
+        opacity: 0.35,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    underGlow.rotation.x = Math.PI / 2;
+    underGlow.position.y = -1.15;
+    this.platformRoot.add(underGlow);
+
+    // Prefer Tripo GLB platform; fall back to procedural octagon stack
+    const glb = cloneBoardAsset('platform');
+    if (glb) {
+      // Align platform TOP under the playable grid (cells sit near y≈0)
+      fitBoardAsset(glb, { targetSpan: PLATFORM_SPAN, groundY: -0.08, alignY: 'top' });
+      this.platformRoot.add(glb);
+      this._useGlbPlatform = true;
+      return;
+    }
 
     const jadeTex = new THREE.CanvasTexture(makeNoiseCanvas(256, {
       base: [22, 48, 40],
@@ -237,16 +266,15 @@ export class BattleScene {
       roughness: 0.28
     });
 
-    // Layered octagonal floating stage (eave stack)
     const tiers = [
       { rTop: 11.6, rBot: 12.0, h: 0.45, y: -0.85 },
       { rTop: 11.15, rBot: 11.4, h: 0.55, y: -0.4 },
       { rTop: 10.7, rBot: 10.9, h: 0.28, y: -0.02 }
     ];
-    tiers.forEach((t, i) => {
+    tiers.forEach((t) => {
       const mesh = new THREE.Mesh(
         new THREE.CylinderGeometry(t.rTop, t.rBot, t.h, 8),
-        i === 2 ? jadeMat : jadeMat.clone()
+        jadeMat.clone()
       );
       mesh.position.y = t.y;
       mesh.receiveShadow = true;
@@ -261,22 +289,6 @@ export class BattleScene {
       this.platformRoot.add(lip);
     });
 
-    // Soft underside glow ring
-    const underGlow = new THREE.Mesh(
-      new THREE.TorusGeometry(10.2, 0.35, 8, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x88c8ff,
-        transparent: true,
-        opacity: 0.35,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false
-      })
-    );
-    underGlow.rotation.x = Math.PI / 2;
-    underGlow.position.y = -1.15;
-    this.platformRoot.add(underGlow);
-
-    // Gem inlays with gold bezels (octahedra)
     const gemColors = [0xff3355, 0x44e0c0, 0x4488ff, 0xffcc44];
     for (let i = 0; i < 8; i++) {
       const ang = (i / 8) * Math.PI * 2 + Math.PI / 8;
@@ -312,18 +324,38 @@ export class BattleScene {
     this.platformRoot.add(lantern);
   }
 
+  /** Rebuild platform after BoardAssets preload finishes. */
+  _refreshPlatformFromAssets() {
+    if (getBoardSource('platform') !== 'glb' || this._useGlbPlatform) return;
+    if (this.platformRoot) this.root.remove(this.platformRoot);
+    this._buildArenaDecor();
+  }
+
   _buildBoard(rows, cols) {
     if (this.boardGroup) {
       this.root.remove(this.boardGroup);
       this.cellMeshes.clear();
     }
+    if (this.rayPlane) {
+      this.root.remove(this.rayPlane);
+      this.rayPlane = null;
+    }
     this.rows = rows;
     this.cols = cols;
     this.boardGroup = new THREE.Group();
+    this._useGlbSurface = false;
 
-    const jadeA = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [28, 92, 72], variance: 22, goldVeins: true }));
-    const jadeB = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [110, 78, 36], variance: 20, goldVeins: true }));
-    jadeA.colorSpace = jadeB.colorSpace = THREE.SRGBColorSpace;
+    const spanX = cols * CELL + (cols - 1) * GAP;
+    const spanZ = rows * CELL + (rows - 1) * GAP;
+    const boardSpan = Math.max(spanX, spanZ);
+
+    // Decorative Tripo surface under interactive hitboxes
+    const surface = cloneBoardAsset('surface');
+    if (surface) {
+      fitBoardAsset(surface, { targetSpan: boardSpan * 1.02, groundY: 0.02, alignY: 'top' });
+      this.boardGroup.add(surface);
+      this._useGlbSurface = true;
+    }
 
     this._highlightMat = new THREE.MeshStandardMaterial({
       color: 0x44eebb,
@@ -340,62 +372,95 @@ export class BattleScene {
       opacity: 0.9
     });
 
-    const grooveMat = new THREE.MeshStandardMaterial({
-      color: 0xe0b858,
-      emissive: 0x886010,
-      emissiveIntensity: 0.7,
-      metalness: 0.78,
-      roughness: 0.28
-    });
-    const grooveW = 0.07;
-    const grooveH = 0.06;
     const cellInner = CELL * 0.82;
 
-    for (let r = 1; r <= rows; r++) {
-      for (let c = 1; c <= cols; c++) {
-        const special = this._isSpecial(r, c);
-        const alt = (r + c) % 2 === 0;
-        const mat = new THREE.MeshStandardMaterial({
-          map: (alt ? jadeA : jadeB).clone(),
-          color: special ? 0x4a6880 : (alt ? 0x2a6a54 : 0x8a6030),
-          emissive: special ? 0x284858 : (alt ? 0x143828 : 0x3a2410),
-          emissiveIntensity: special ? 0.45 : 0.28,
-          roughness: 0.45,
-          metalness: 0.3
-        });
-        const cellH = special ? 0.26 : 0.12;
-        const mesh = new THREE.Mesh(
-          new THREE.BoxGeometry(cellInner, cellH, cellInner),
-          mat
-        );
-        const p = cellCenter(r, c, rows, cols);
-        // Recessed jade tiles; gold grooves sit in the surrounding channels
-        mesh.position.set(p.x, special ? 0.12 : 0.04, p.z);
-        mesh.receiveShadow = true;
-        mesh.userData.cell = { r, c };
-        mesh.userData.baseColor = mesh.material.color.clone();
-        mesh.userData.baseEmissive = mesh.material.emissive.clone();
-        mesh.userData.baseEmissiveIntensity = mesh.material.emissiveIntensity;
-        this.boardGroup.add(mesh);
-        this.cellMeshes.set(`${r},${c}`, mesh);
-
-        const half = CELL * 0.5 - grooveW * 0.35;
-        const len = CELL * 0.92;
-        const gy = 0.1;
-        const bars = [
-          { sx: len, sz: grooveW, x: 0, z: half },
-          { sx: len, sz: grooveW, x: 0, z: -half },
-          { sx: grooveW, sz: len, x: half, z: 0 },
-          { sx: grooveW, sz: len, x: -half, z: 0 }
-        ];
-        bars.forEach(b => {
-          const bar = new THREE.Mesh(
-            new THREE.BoxGeometry(b.sx, grooveH, b.sz),
-            grooveMat
+    if (this._useGlbSurface) {
+      // Invisible / highlight-only hitboxes over the GLB surface
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          const mat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            emissive: 0x000000,
+            emissiveIntensity: 0,
+            transparent: true,
+            opacity: 0.0,
+            depthWrite: false
+          });
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(cellInner, 0.06, cellInner),
+            mat
           );
-          bar.position.set(p.x + b.x, gy, p.z + b.z);
-          this.boardGroup.add(bar);
-        });
+          const p = cellCenter(r, c, rows, cols);
+          mesh.position.set(p.x, 0.14, p.z);
+          mesh.userData.cell = { r, c };
+          mesh.userData.baseColor = mat.color.clone();
+          mesh.userData.baseEmissive = mat.emissive.clone();
+          mesh.userData.baseEmissiveIntensity = 0;
+          mesh.userData.hitboxOnly = true;
+          this.boardGroup.add(mesh);
+          this.cellMeshes.set(`${r},${c}`, mesh);
+        }
+      }
+    } else {
+      const jadeA = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [28, 92, 72], variance: 22, goldVeins: true }));
+      const jadeB = new THREE.CanvasTexture(makeNoiseCanvas(128, { base: [110, 78, 36], variance: 20, goldVeins: true }));
+      jadeA.colorSpace = jadeB.colorSpace = THREE.SRGBColorSpace;
+
+      const grooveMat = new THREE.MeshStandardMaterial({
+        color: 0xe0b858,
+        emissive: 0x886010,
+        emissiveIntensity: 0.7,
+        metalness: 0.78,
+        roughness: 0.28
+      });
+      const grooveW = 0.07;
+      const grooveH = 0.06;
+
+      for (let r = 1; r <= rows; r++) {
+        for (let c = 1; c <= cols; c++) {
+          const special = this._isSpecial(r, c);
+          const alt = (r + c) % 2 === 0;
+          const mat = new THREE.MeshStandardMaterial({
+            map: (alt ? jadeA : jadeB).clone(),
+            color: special ? 0x4a6880 : (alt ? 0x2a6a54 : 0x8a6030),
+            emissive: special ? 0x284858 : (alt ? 0x143828 : 0x3a2410),
+            emissiveIntensity: special ? 0.45 : 0.28,
+            roughness: 0.45,
+            metalness: 0.3
+          });
+          const cellH = special ? 0.26 : 0.12;
+          const mesh = new THREE.Mesh(
+            new THREE.BoxGeometry(cellInner, cellH, cellInner),
+            mat
+          );
+          const p = cellCenter(r, c, rows, cols);
+          mesh.position.set(p.x, special ? 0.12 : 0.04, p.z);
+          mesh.receiveShadow = true;
+          mesh.userData.cell = { r, c };
+          mesh.userData.baseColor = mesh.material.color.clone();
+          mesh.userData.baseEmissive = mesh.material.emissive.clone();
+          mesh.userData.baseEmissiveIntensity = mesh.material.emissiveIntensity;
+          this.boardGroup.add(mesh);
+          this.cellMeshes.set(`${r},${c}`, mesh);
+
+          const half = CELL * 0.5 - grooveW * 0.35;
+          const len = CELL * 0.92;
+          const gy = 0.1;
+          const bars = [
+            { sx: len, sz: grooveW, x: 0, z: half },
+            { sx: len, sz: grooveW, x: 0, z: -half },
+            { sx: grooveW, sz: len, x: half, z: 0 },
+            { sx: grooveW, sz: len, x: -half, z: 0 }
+          ];
+          bars.forEach(b => {
+            const bar = new THREE.Mesh(
+              new THREE.BoxGeometry(b.sx, grooveH, b.sz),
+              grooveMat
+            );
+            bar.position.set(p.x + b.x, gy, p.z + b.z);
+            this.boardGroup.add(bar);
+          });
+        }
       }
     }
     this.root.add(this.boardGroup);
@@ -411,8 +476,8 @@ export class BattleScene {
   }
 
   _isSpecial(r, c) {
-    return (r === 2 && c === 2) || (r === 2 && c === 7) ||
-      (r === 6 && c === 2) || (r === 6 && c === 7);
+    return (r === 2 && c === 3) || (r === 2 && c === 6) ||
+      (r === 6 && c === 3) || (r === 6 && c === 6);
   }
 
   setInteractive(v) {
@@ -518,6 +583,7 @@ export class BattleScene {
       mesh.material.color.copy(mesh.userData.baseColor);
       mesh.material.emissive.copy(mesh.userData.baseEmissive);
       mesh.material.emissiveIntensity = mesh.userData.baseEmissiveIntensity || 0.2;
+      if (mesh.userData.hitboxOnly) mesh.material.opacity = 0;
     });
   }
 
@@ -529,6 +595,7 @@ export class BattleScene {
       m.material.color.copy(this._highlightMat.color);
       m.material.emissive.copy(this._highlightMat.emissive);
       m.material.emissiveIntensity = 0.75;
+      if (m.userData.hitboxOnly) m.material.opacity = 0.55;
     });
     (dangerSet || []).forEach(({ r, c }) => {
       const m = this.cellMeshes.get(`${r},${c}`);
@@ -536,6 +603,7 @@ export class BattleScene {
       m.material.color.copy(this._dangerMat.color);
       m.material.emissive.copy(this._dangerMat.emissive);
       m.material.emissiveIntensity = 0.75;
+      if (m.userData.hitboxOnly) m.material.opacity = 0.55;
     });
   }
 
@@ -560,13 +628,21 @@ export class BattleScene {
     };
   }
 
-  syncBoard(state, opts = {}) {
+  async syncBoard(state, opts = {}) {
+    await Promise.all([preloadSpiritModels(), preloadBoardModels()]);
+    this._refreshPlatformFromAssets();
     if (!state) {
       this._clearAvatars();
-      return Promise.resolve();
+      return;
     }
-    if (state.rows !== this.rows || state.cols !== this.cols) {
-      this._buildBoard(state.rows || 7, state.cols || 8);
+    const nextRows = state.rows || 7;
+    const nextCols = state.cols || 8;
+    const needRebuild =
+      nextRows !== this.rows ||
+      nextCols !== this.cols ||
+      (getBoardSource('surface') === 'glb' && !this._useGlbSurface);
+    if (needRebuild) {
+      this._buildBoard(nextRows, nextCols);
     }
 
     const nextMap = new Map();

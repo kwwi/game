@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>灵兽展示 · 动物棋</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #0a1228; }
+    #gallery-root { position: absolute; inset: 0; }
+    .gallery-hud {
+      position: absolute; left: 50%; top: 18px; transform: translateX(-50%);
+      z-index: 5; pointer-events: none; text-align: center;
+      max-width: min(920px, 92vw);
+      padding: 12px 18px; border-radius: 14px;
+      background: rgba(8, 14, 28, 0.72); backdrop-filter: blur(10px);
+      border: 1px solid rgba(200, 170, 100, 0.25);
+      color: #f2e6c8; font-family: "Songti SC", "Noto Serif SC", serif;
+    }
+    .gallery-hud h1 { margin: 0 0 6px; font-size: 1.35rem; letter-spacing: 0.12em; color: #ffe6a8; }
+    .gallery-hud p { margin: 0; font-size: 0.78rem; line-height: 1.45; opacity: 0.85; word-break: break-all; }
+    .gallery-back {
+      pointer-events: auto; position: absolute; right: 16px; top: 16px; z-index: 6;
+      padding: 8px 14px; border-radius: 10px; border: 1px solid rgba(200,170,100,0.35);
+      background: rgba(20,28,48,0.8); color: #f2e6c8; text-decoration: none; font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div id="gallery-root"></div>
+  <a class="gallery-back" href="index.html">返回大厅</a>
+  <div class="gallery-hud">
+    <h1>十二灵兽</h1>
+    <p id="galleryStatus">准备中…</p>
+  </div>
+  <script type="module">
+    import { bootSpiritGallery } from './scene/SpiritGallery.js';
+    bootSpiritGallery(document.getElementById('gallery-root')).catch((e) => {
+      document.getElementById('galleryStatus').textContent = '加载失败: ' + (e?.message || e);
+      console.error(e);
+    });
+  </script>
+</body>
+</html>

@@ -5,6 +5,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { LobbyScene } from './LobbyScene.js';
 import { BattleScene } from './BattleScene.js';
 import { playEnterRoom } from './Transition.js';
+import { preloadSpiritModels } from './pieces/CharacterFactory.js';
+import { preloadBoardModels } from './BoardAssets.js';
 
 const PIXEL_CAP = 1.75;
 
@@ -121,10 +123,22 @@ export function createApp(rootEl, opts = {}) {
   showLobby();
   tick();
 
+  const whenReady = Promise.all([
+    preloadSpiritModels().catch((e) => console.warn('[spirits] preload', e)),
+    preloadBoardModels().catch((e) => console.warn('[board] preload', e))
+  ]).then(() => {
+    battle._refreshPlatformFromAssets?.();
+    // Rebuild board once if surface GLB arrived after initial procedural build
+    if (battle._useGlbSurface === false) {
+      battle._buildBoard(battle.rows, battle.cols);
+    }
+  });
+
   return {
     renderer,
     lobby,
     battle,
+    whenReady,
     showLobby,
     showBattle,
     enterBattleWithTransition,

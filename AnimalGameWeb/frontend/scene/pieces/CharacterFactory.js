@@ -1,10 +1,13 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makeGlyphTexture } from '../textures.js';
 
 const GEO = {};
 const MAT = {};
 
-const SPIRIT = {
+export const SPIRIT = {
   WHALE: { color: 0x3aa8e0, ei: 0.85 },
   PHOENIX: { color: 0xff5520, ei: 1.0 },
   DRAGON: { color: 0xe0b84a, ei: 0.9 },
@@ -19,10 +22,85 @@ const SPIRIT = {
   MOUSE: { color: 0xa898b0, ei: 0.5 }
 };
 
-const ZH = {
+export const ZH = {
   WHALE: '鲸', PHOENIX: '凤', DRAGON: '龙', ELEPHANT: '象', LION: '狮', TIGER: '虎',
   LEOPARD: '豹', JACKAL: '豺', WOLF: '狼', DOG: '狗', CAT: '猫', MOUSE: '鼠'
 };
+
+export const SPIRIT_TYPES = Object.keys(SPIRIT);
+
+const MODEL_FILE = {
+  WHALE: 'whale.glb', PHOENIX: 'phoenix.glb', DRAGON: 'dragon.glb', ELEPHANT: 'elephant.glb',
+  LION: 'lion.glb', TIGER: 'tiger.glb', LEOPARD: 'leopard.glb', JACKAL: 'jackal.glb',
+  WOLF: 'wolf.glb', DOG: 'dog.glb', CAT: 'cat.glb', MOUSE: 'mouse.glb'
+};
+
+const glbTemplates = new Map();
+const glbSource = new Map(); // type -> 'glb' | 'procedural'
+let preloadPromise = null;
+
+function modelsBaseUrl() {
+  // Gallery may live at /spirit-gallery.html; game at /
+  const base = new URL('.', window.location.href);
+  return new URL('assets/models/', base).href;
+}
+
+/** Preload all spirit GLBs. Safe to call multiple times. */
+export function preloadSpiritModels() {
+  if (preloadPromise) return preloadPromise;
+  const loader = new GLTFLoader();
+  const draco = new DRACOLoader();
+  // Official Google Draco WASM decoder (matches three@0.160 addons)
+  draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+  loader.setDRACOLoader(draco);
+  // Tripo Studio meshopt GLBs require EXT_meshopt_compression
+  loader.setMeshoptDecoder(MeshoptDecoder);
+  const base = modelsBaseUrl();
+  preloadPromise = Promise.all(
+    SPIRIT_TYPES.map(async (type) => {
+      const file = MODEL_FILE[type];
+      try {
+        const gltf = await loader.loadAsync(`${base}${file}`);
+        const scene = gltf.scene || gltf.scenes?.[0];
+        if (!scene) throw new Error('empty gltf');
+        scene.traverse((o) => {
+          if (o.isMesh) {
+            o.castShadow = true;
+            o.receiveShadow = true;
+            const mats = Array.isArray(o.material) ? o.material : [o.material];
+            mats.forEach((m) => {
+              if (!m) return;
+              if ('envMapIntensity' in m) m.envMapIntensity = 1.15;
+              if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+              m.needsUpdate = true;
+            });
+          }
+        });
+        // Fit into ~0.95 cube by max axis so bulky vs tall spirits match in volume
+        scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(scene);
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z, 1e-4);
+        const s = 0.95 / maxDim;
+        scene.scale.multiplyScalar(s);
+        scene.updateMatrixWorld(true);
+        const box2 = new THREE.Box3().setFromObject(scene);
+        scene.position.y -= box2.min.y;
+        glbTemplates.set(type, scene);
+        glbSource.set(type, 'glb');
+      } catch (err) {
+        console.warn(`[spirits] GLB load failed for ${type}, using procedural`, err?.message || err);
+        glbSource.set(type, 'procedural');
+      }
+    })
+  ).then(() => glbSource);
+  return preloadPromise;
+}
+
+export function getSpiritLoadSource(type) {
+  return glbSource.get(type) || 'pending';
+}
 
 function geo(key, factory) {
   if (!GEO[key]) GEO[key] = factory();
@@ -425,17 +503,41 @@ const BUILDERS = {
   WHALE: makeWhale
 };
 
-export function createCharacter(type, camp) {
-  const builder = BUILDERS[type] || makeMouse;
-  const mesh = builder(camp);
-  mesh.userData.type = type;
-  mesh.userData.camp = camp;
-  mesh.userData.faceDown = false;
+/** Camp body tint for shared Tripo GLB templates (materials cloned per instance). */
+function applyCampLook(root, camp) {
+  const isRed = camp === 'RED';
+  const tint = new THREE.Color(isRed ? 0xffc4a0 : 0xa8c4e8);
+  const emissive = new THREE.Color(isRed ? 0x6a2010 : 0x102038);
+  root.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    const src = Array.isArray(o.material) ? o.material : [o.material];
+    const cloned = src.map((m) => {
+      if (!m) return m;
+      const c = m.clone();
+      if (c.color) c.color.multiply(tint);
+      if ('emissive' in c) {
+        c.emissive.copy(emissive);
+        c.emissiveIntensity = Math.max(c.emissiveIntensity || 0, isRed ? 0.22 : 0.18);
+      }
+      if ('metalness' in c && c.metalness != null) {
+        c.metalness = Math.min(1, (c.metalness || 0) * 0.85 + 0.12);
+      }
+      if ('roughness' in c && c.roughness != null) {
+        c.roughness = Math.max(0.25, Math.min(0.85, (c.roughness || 0.5) * 0.95));
+      }
+      c.needsUpdate = true;
+      return c;
+    });
+    o.material = Array.isArray(o.material) ? cloned : cloned[0];
+  });
+}
 
-  const spirit = SPIRIT[type] || SPIRIT.MOUSE;
-  const hex = '#' + spirit.color.toString(16).padStart(6, '0');
-  const tex = new THREE.CanvasTexture(makeGlyphTexture(ZH[type] || '?', hex));
+function attachFootAura(mesh, type, camp) {
+  const campAccent = camp === 'RED' ? 0xffb070 : 0x88d0ff;
+  const glyphHex = camp === 'RED' ? '#ffd0a8' : '#b8d8ff';
+  const tex = new THREE.CanvasTexture(makeGlyphTexture(ZH[type] || '?', glyphHex));
   tex.colorSpace = THREE.SRGBColorSpace;
+
   const pad = new THREE.Mesh(
     geo('glyphPad', () => new THREE.CircleGeometry(0.38, 24)),
     new THREE.MeshBasicMaterial({
@@ -450,21 +552,60 @@ export function createCharacter(type, camp) {
   pad.name = 'nameBadge';
   mesh.add(pad);
 
-  // soft aura ring
+  // Camp identity ring (warm cinnabar / cool ink-cyan)
   const ring = new THREE.Mesh(
-    geo('auraRing', () => new THREE.TorusGeometry(0.42, 0.03, 6, 24)),
+    geo('auraRingCamp', () => new THREE.TorusGeometry(0.42, 0.028, 6, 24)),
     new THREE.MeshBasicMaterial({
-      color: spirit.color,
+      color: campAccent,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.7,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     })
   );
   ring.rotation.x = Math.PI / 2;
-  ring.position.y = 0.06;
+  ring.position.y = 0.055;
+  ring.name = 'campAura';
   mesh.add(ring);
 
+  // Soft camp underglow (unified palette, not rainbow spirit colors)
+  const glow = new THREE.Mesh(
+    geo('auraGlowCamp', () => new THREE.CircleGeometry(0.48, 20)),
+    new THREE.MeshBasicMaterial({
+      color: campAccent,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    })
+  );
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.02;
+  mesh.add(glow);
+}
+
+export function createCharacter(type, camp) {
+  const t = (type || 'MOUSE').toUpperCase();
+  const c = camp || 'BLACK';
+  let mesh;
+  const tmpl = glbTemplates.get(t);
+  if (tmpl) {
+    mesh = new THREE.Group();
+    const body = tmpl.clone(true);
+    body.name = 'spiritBody';
+    applyCampLook(body, c);
+    mesh.add(body);
+    mesh.userData.parts = { body };
+    mesh.userData.fromGlb = true;
+  } else {
+    const builder = BUILDERS[t] || makeMouse;
+    mesh = builder(c);
+    mesh.userData.fromGlb = false;
+  }
+  mesh.userData.type = t;
+  mesh.userData.camp = c;
+  mesh.userData.faceDown = false;
+  attachFootAura(mesh, t, c);
   return mesh;
 }
 

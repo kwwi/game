@@ -37,6 +37,14 @@ public class RoomController {
         return ResponseEntity.ok(resp);
     }
 
+    @PostMapping("vs-ai")
+    public ResponseEntity<GameService.GameCreatedResponse> vsAiPlay(
+            @RequestBody GameService.JoinGameRequest req) {
+        GameService.GameCreatedResponse resp = service.vsAiPlay(req);
+        if (resp == null) return ResponseEntity.badRequest().build();
+        return ResponseEntity.ok(resp);
+    }
+
     @PostMapping("{id}/join")
     public ResponseEntity<GameService.GameCreatedResponse> joinRoom(
             @PathVariable String id,

@@ -20,11 +20,18 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class GameService {
 
+    public static final String AI_PLAYER = "__AI__";
+
     private final Map<String, GameSession> rooms = new ConcurrentHashMap<>();
     private final Random rng = new Random();
+    private final AiOpponentService aiOpponent;
 
     @Value("${room.count:10}")
     private int roomCount;
+
+    public GameService(AiOpponentService aiOpponent) {
+        this.aiOpponent = aiOpponent;
+    }
 
     @PostConstruct
     public void initRooms() {
@@ -40,6 +47,7 @@ public class GameService {
         session.playerA = null;
         session.playerB = null;
         session.solo = false;
+        session.vsAi = false;
         rooms.put(id, session);
         return id;
     }
@@ -58,6 +66,7 @@ public class GameService {
         info.playerA = s.playerA;
         info.playerB = s.playerB;
         info.solo = s.solo;
+        info.vsAi = s.vsAi;
         info.full = !s.solo && s.playerA != null && s.playerB != null;
         info.spectatorCount = s.spectators.size();
         info.hasGame = s.engine != null;
@@ -80,7 +89,7 @@ public class GameService {
         String preferEmpty = null;
         for (Map.Entry<String, GameSession> e : rooms.entrySet()) {
             GameSession s = e.getValue();
-            if (s.solo) continue;
+            if (s.solo || s.vsAi) continue;
             if (s.playerA != null && s.playerB != null) continue;
             if (username.equals(s.playerA) || username.equals(s.playerB)) continue;
             // A 或 B 任一在座都算「已有一人」（含 A 离房仅剩 B 的情况）
@@ -126,6 +135,7 @@ public class GameService {
         session.playerA = username;
         session.playerB = username;
         session.solo = true;
+        session.vsAi = false;
         session.spectators.clear();
 
         GameCreatedResponse resp = new GameCreatedResponse();
@@ -134,6 +144,53 @@ public class GameService {
         resp.side = first;
         resp.role = "PLAYER";
         resp.solo = true;
+        resp.vsAi = false;
+        return resp;
+    }
+
+    /** 人机对弈：玩家固定 A，AI 为 B */
+    public GameCreatedResponse vsAiPlay(JoinGameRequest req) {
+        if (req == null || req.username == null || req.username.isEmpty()) return null;
+        String username = req.username;
+
+        String roomId = null;
+        for (Map.Entry<String, GameSession> e : rooms.entrySet()) {
+            GameSession s = e.getValue();
+            if (s.engine == null && s.playerA == null && s.playerB == null) {
+                roomId = e.getKey();
+                break;
+            }
+        }
+        if (roomId == null) {
+            roomId = createEmptyRoom();
+        }
+
+        GameSession session = rooms.get(roomId);
+        GameEngine engine = new GameEngine(rng);
+        int a = engine.rollDice();
+        int b = engine.rollDice();
+        while (a == b) {
+            a = engine.rollDice();
+            b = engine.rollDice();
+        }
+        Side first = (a > b) ? Side.A : Side.B;
+        engine.setCurrentSide(first);
+        engine.initRandomSetup();
+        session.engine = engine;
+        session.playerA = username;
+        session.playerB = AI_PLAYER;
+        session.solo = false;
+        session.vsAi = true;
+        session.spectators.clear();
+        // AI 先手时不在此同步落子：由前端渲染后再请求 /ai-turn
+
+        GameCreatedResponse resp = new GameCreatedResponse();
+        resp.gameId = roomId;
+        resp.state = engine.toGameState();
+        resp.side = Side.A;
+        resp.role = "PLAYER";
+        resp.solo = false;
+        resp.vsAi = true;
         return resp;
     }
 
@@ -147,7 +204,7 @@ public class GameService {
             return playerResponse(roomId, session, username);
         }
 
-        if (session.solo) {
+        if (session.solo || session.vsAi) {
             return null;
         }
 
@@ -170,6 +227,7 @@ public class GameService {
             session.playerA = username;
             session.playerB = null;
             session.solo = false;
+            session.vsAi = false;
 
             GameCreatedResponse resp = new GameCreatedResponse();
             resp.gameId = roomId;
@@ -177,6 +235,7 @@ public class GameService {
             resp.side = Side.A;
             resp.role = "PLAYER";
             resp.solo = false;
+            resp.vsAi = false;
             return resp;
         }
 
@@ -197,6 +256,7 @@ public class GameService {
         resp.side = joinedSide;
         resp.role = "PLAYER";
         resp.solo = false;
+        resp.vsAi = session.vsAi;
         return resp;
     }
 
@@ -220,6 +280,7 @@ public class GameService {
         resp.side = null;
         resp.role = "SPECTATOR";
         resp.solo = session.solo;
+        resp.vsAi = session.vsAi;
         return resp;
     }
 
@@ -230,6 +291,8 @@ public class GameService {
         session.spectators.remove(username);
 
         if (session.solo && username.equals(session.playerA)) {
+            resetSession(session);
+        } else if (session.vsAi && username.equals(session.playerA)) {
             resetSession(session);
         } else if (username.equals(session.playerA)) {
             session.playerA = null;
@@ -249,6 +312,7 @@ public class GameService {
         resp.side = null;
         resp.role = "LEFT";
         resp.solo = false;
+        resp.vsAi = false;
         return resp;
     }
 
@@ -257,6 +321,7 @@ public class GameService {
         session.playerA = null;
         session.playerB = null;
         session.solo = false;
+        session.vsAi = false;
         session.spectators.clear();
     }
 
@@ -265,6 +330,7 @@ public class GameService {
         resp.gameId = roomId;
         resp.state = session.engine != null ? session.engine.toGameState() : null;
         resp.solo = session.solo;
+        resp.vsAi = session.vsAi;
         resp.role = "PLAYER";
         if (session.solo) {
             resp.side = session.engine != null ? session.engine.getCurrentSide() : Side.A;
@@ -308,9 +374,30 @@ public class GameService {
         return session.engine.toGameState();
     }
 
+    /** 人机对弈：在人类落子渲染完成并由前端延迟后，请求 AI 走一步 */
+    public GameState aiTurn(String gameId, String username) {
+        GameSession session = rooms.get(gameId);
+        if (session == null || session.engine == null || username == null) return null;
+        if (!session.vsAi) return session.engine.toGameState();
+        if (!username.equals(session.playerA)) return session.engine.toGameState();
+        if (session.engine.getResult() != com.example.animalgameweb.core.GameResult.ONGOING) {
+            return session.engine.toGameState();
+        }
+        if (session.engine.getCurrentSide() != Side.B) {
+            return session.engine.toGameState();
+        }
+        try {
+            aiOpponent.playTurn(session.engine);
+        } catch (Exception e) {
+            // keep game playable even if AI crashes
+        }
+        return session.engine.toGameState();
+    }
+
     /**
      * 普通对局：用户名对应固定一方。
      * 自弈：同一用户可操作当前回合方。
+     * 人机：人类只能操作 A，不可冒充 AI。
      */
     private Side resolveSide(GameSession session, String username) {
         if (username == null) return null;
@@ -318,6 +405,10 @@ public class GameService {
             if (username.equals(session.playerA) || username.equals(session.playerB)) {
                 return session.engine != null ? session.engine.getCurrentSide() : Side.A;
             }
+            return null;
+        }
+        if (session.vsAi) {
+            if (username.equals(session.playerA)) return Side.A;
             return null;
         }
         if (username.equals(session.playerA)) return Side.A;
@@ -330,6 +421,7 @@ public class GameService {
         String playerA;
         String playerB;
         boolean solo;
+        boolean vsAi;
         final Set<String> spectators = ConcurrentHashMap.newKeySet();
     }
 
@@ -339,6 +431,7 @@ public class GameService {
         public Side side;
         public String role;
         public boolean solo;
+        public boolean vsAi;
     }
 
     public static final class CreateGameRequest {
@@ -360,6 +453,7 @@ public class GameService {
         public String playerB;
         public boolean full;
         public boolean solo;
+        public boolean vsAi;
         public boolean hasGame;
         public int spectatorCount;
         public String roleA;

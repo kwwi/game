@@ -4,3 +4,6 @@
 .gradle/
 build/
 target/
+
+# spirit glb build deps
+AnimalGameWeb/tools/spirit-glb/node_modules/
