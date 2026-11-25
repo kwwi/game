@@ -3,187 +3,104 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Animal Game Web</title>
-    <style>
-        * { box-sizing: border-box; }
-        html, body { height: 100%; margin: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background: #ffffff;
-            color: #1a1a1a;
-        }
-        .app {
-            min-height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-        .app-controls {
-            flex-shrink: 0;
-            padding: 10px 16px 12px;
-            border-bottom: 1px solid #e8e8e8;
-            background: #fff;
-        }
-        .app-controls h1 {
-            margin: 0 0 10px 0;
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-        .controls-row {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 8px 12px;
-            margin-top: 6px;
-        }
-        .panel { margin: 0; }
-        .panel.inline { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        #board {
-            display: grid;
-            margin: 0 auto;
-            /* 列行尺寸由 main.js layoutBoardGrid 按窗口计算 */
-        }
-        .cell {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-            background: #f0f0f0;
-            border-radius: 4px;
-            cursor: pointer;
-            color: #666;
-            border: 1px solid #dcdcdc;
-            user-select: none;
-        }
-        .cell.special { background: #dde4ec; border-color: #c5d0e0; }
-        .cell.face-down { color: #888; }
-        .cell.selected { outline: 3px solid #c9a227; outline-offset: -1px; }
-        .cell.piece-red { color: #c62828; }
-        .cell.piece-black { color: #212121; }
-        button {
-            margin: 0;
-            padding: 6px 12px;
-            cursor: pointer;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            background: #fff;
-            font-size: 13px;
-        }
-        button:hover { background: #f5f5f5; }
-        input[type="text"] {
-            padding: 6px 8px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            font-size: 13px;
-        }
-        .captured-panel {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 16px 24px;
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid #d0d0d0;
-            font-size: 13px;
-        }
-        .captured-panel span { font-size: 13px; }
-        #capturedRed { color: #c62828; }
-        #capturedBlack { color: #212121; }
-        .room-table { margin-top: 8px; border-collapse: collapse; font-size: 13px; width: 100%; max-width: 640px; }
-        .room-table th, .room-table td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
-        .room-table th { background: #f5f5f5; }
-        .room-table tr.full { opacity: 0.65; }
-        .role-red { color: #c62828; }
-        .role-black { color: #212121; }
-        .board-disabled .cell { cursor: not-allowed; opacity: 0.88; }
-        .board-stage {
-            flex: 1;
-            min-height: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 12px 16px 20px;
-            background: #ffffff;
-        }
-        .board-frame {
-            background: #e8eaed;
-            padding: 14px 16px 16px;
-            border-radius: 12px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-            max-width: 100%;
-            max-height: 100%;
-            overflow: auto;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #status { font-size: 13px; color: #444; }
-        #tip {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(40, 40, 40, 0.92);
-            color: #fff;
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 13px;
-            display: none;
-            z-index: 9999;
-            max-width: 90vw;
-            text-align: center;
-        }
-        #pieceGhost {
-            position: fixed;
-            pointer-events: none;
-            font-weight: bold;
-            z-index: 9998;
-            display: none;
-            transform: translate(-50%, -50%);
-            text-shadow: 0 0 4px #fff, 0 0 8px #fff;
-        }
-        #pieceGhost.piece-red { color: #c62828; }
-        #pieceGhost.piece-black { color: #212121; }
-    </style>
+    <title>动物棋 · 玉盘对决</title>
+    <link rel="stylesheet" href="styles.css?v=ai-reason-panel" />
 </head>
-<body>
+<body class="mode-lobby">
     <div class="app">
-        <div class="app-controls">
-            <h1>Animal Game Web</h1>
-            <div class="controls-row">
-                <div class="panel inline">
-                    <label>用户名：<input id="username" type="text" placeholder="请输入用户名" /></label>
+        <!-- 大厅 -->
+        <section id="viewLobby" class="view view-lobby">
+            <header class="lobby-hero">
+                <div class="brand-block">
+                    <h1>动物棋</h1>
+                    <p class="brand-sub">雾林玉盘 · 贴图对决</p>
                 </div>
-                <div class="panel inline">
-                    <button id="btnQuickJoin">快速加入</button>
-                    <button id="btnFlip">翻牌说明</button>
+                <div class="top-actions">
+                    <button type="button" id="btnMuteLobby" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
                 </div>
-                <div class="panel inline">
-                    <label>房间ID：<input id="gameIdInput" type="text" placeholder="输入房间ID加入" /></label>
-                    <button id="btnJoin">加入房间</button>
+            </header>
+
+            <div class="lobby-card glass">
+                <div class="lobby-user">
+                    <label>用户名
+                        <input id="username" type="text" placeholder="请输入用户名" autocomplete="nickname" />
+                    </label>
+                </div>
+                <div class="lobby-actions">
+                    <button id="btnQuickJoin" type="button">快速加入</button>
+                    <button id="btnSolo" type="button" class="accent">自己对弈</button>
+                    <button id="btnVsAi" type="button" class="accent">人机对弈</button>
+                </div>
+                <div class="lobby-join-id">
+                    <label>房间ID
+                        <input id="gameIdInput" type="text" placeholder="输入房间ID加入或观战" />
+                    </label>
+                    <button id="btnJoin" type="button">加入对局</button>
+                    <button id="btnSpectateId" type="button" class="ghost">观战</button>
                 </div>
             </div>
-            <div class="panel" id="roomPanel">
-                <strong>房间列表</strong>
-                <button id="btnRefreshRooms">刷新</button>
+
+            <div class="lobby-rooms glass">
+                <div class="room-head">
+                    <h2>对局大厅</h2>
+                    <button id="btnRefreshRooms" type="button" class="ghost">刷新</button>
+                </div>
                 <div id="roomList"></div>
             </div>
-            <div class="panel inline" style="margin-top:8px;">
-                <span id="status">未连接</span>
-                <button id="btnLeave">退出房间</button>
-            </div>
-        </div>
-        <main class="board-stage">
-            <div class="board-frame">
-                <div id="board"></div>
-                <div class="captured-panel">
-                    <div>红方被吃：<span id="capturedRed"></span></div>
-                    <div>黑方被吃：<span id="capturedBlack"></span></div>
+        </section>
+
+        <!-- 对局 -->
+        <section id="viewGame" class="view view-game hidden">
+            <header class="app-controls game-header glass">
+                <div class="brand-row">
+                    <div>
+                        <h1>动物棋</h1>
+                        <p class="brand-sub" id="gameModeLabel">对局中</p>
+                    </div>
+                    <div class="top-actions">
+                        <button type="button" id="btnMute" class="ghost icon-btn" title="静音开关" aria-label="静音开关">🔊</button>
+                        <button type="button" id="btnFlip" class="ghost">规则</button>
+                        <button type="button" id="btnLeave" class="ghost">返回大厅</button>
+                    </div>
+                </div>
+                <div class="status-bar">
+                    <span id="status">未连接</span>
+                </div>
+            </header>
+
+            <main class="board-stage">
+                <div class="board-frame">
+                    <div id="board" class="board" aria-label="棋盘"></div>
+                </div>
+            </main>
+
+            <aside id="aiReasonPanel" class="ai-reason-panel glass hidden" aria-live="polite">
+                <div class="ai-reason-head">
+                    <strong>AI 推理</strong>
+                    <span id="aiReasonSource" class="ai-reason-source"></span>
+                </div>
+                <div id="aiReasonStatus" class="ai-reason-status">等待 AI 回合…</div>
+                <div id="aiReasonResult" class="ai-reason-result hidden"></div>
+                <div id="aiReasonBody" class="ai-reason-body hidden"></div>
+            </aside>
+
+            <div class="captured-panel glass floating-captured">
+                <div class="captured-group camp-red-label">
+                    <div>红方被吃</div>
+                    <div id="capturedRed" class="captured-icons"><span class="empty">无</span></div>
+                </div>
+                <div class="captured-group camp-black-label">
+                    <div>黑方被吃</div>
+                    <div id="capturedBlack" class="captured-icons"><span class="empty">无</span></div>
                 </div>
             </div>
-        </main>
+        </section>
     </div>
-    <div id="pieceGhost"></div>
-    <div id="tip"></div>
 
-    <script src="main.js"></script>
+    <div id="tip" role="status"></div>
+    <div id="resultBanner" aria-live="polite"><div class="banner-card"></div></div>
+
+    <script src="audio.js"></script>
+    <script type="module" src="main.js?v=ai-reason-panel"></script>
 </body>
 </html>

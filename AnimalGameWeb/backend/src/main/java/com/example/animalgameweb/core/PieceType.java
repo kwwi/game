@@ -8,7 +8,7 @@ public enum PieceType {
     LION("狮", 8),
     TIGER("虎", 7),
     LEOPARD("豹", 6),
-    FORTUNE("财", 5),
+    JACKAL("豺", 5),
     WOLF("狼", 4),
     DOG("狗", 3),
     CAT("猫", 2),

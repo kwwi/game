@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 龙：蜿蜒身躯 + 角 -->
+  <path d="M24 86 C40 60, 56 96, 72 64 C84 44, 96 70, 110 52" stroke="#1a1a1a" stroke-width="3.2" stroke-linecap="round" fill="none"/>
+  <path d="M104 48 C112 40, 118 46, 112 54" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round" fill="none"/>
+  <path d="M102 42 L98 30" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M108 44 L112 32" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round"/>
+  <circle cx="106" cy="48" r="1.8" fill="#1a1a1a"/>
+  <path d="M48 72 L44 60" stroke="#1a1a1a" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+  <path d="M68 68 L72 56" stroke="#1a1a1a" stroke-width="1.8" stroke-linecap="round" opacity="0.7"/>
+</svg>

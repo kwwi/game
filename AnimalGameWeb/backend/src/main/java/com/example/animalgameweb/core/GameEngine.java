@@ -18,8 +18,8 @@ public final class GameEngine {
     private final Map<Pos, Piece> board = new HashMap<>();
     private final List<Piece> allPieces = new ArrayList<>();
     private final Set<Pos> specialCells = new HashSet<>(java.util.Arrays.asList(
-            new Pos(2, 2), new Pos(2, 7),
-            new Pos(6, 2), new Pos(6, 7)
+            new Pos(2, 3), new Pos(2, 6),
+            new Pos(6, 3), new Pos(6, 6)
     ));
 
     private Side currentSide = Side.A;
@@ -76,7 +76,7 @@ public final class GameEngine {
         add(pool, PieceType.LION, 2);
         add(pool, PieceType.TIGER, 2);
         add(pool, PieceType.LEOPARD, 2);
-        add(pool, PieceType.FORTUNE, 2);
+        add(pool, PieceType.JACKAL, 2);
         add(pool, PieceType.WOLF, 2);
         add(pool, PieceType.DOG, 2);
         add(pool, PieceType.CAT, 2);

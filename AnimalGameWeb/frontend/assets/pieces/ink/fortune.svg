@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 财：元宝两笔成型 -->
+  <path d="M34 70 C34 52, 94 52, 94 70 C94 86, 78 94, 64 94 C50 94, 34 86, 34 70 Z" stroke="#1a1a1a" stroke-width="3" stroke-linejoin="round" fill="none"/>
+  <path d="M44 58 C52 46, 76 46, 84 58" stroke="#1a1a1a" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+  <path d="M52 74 L76 74" stroke="#1a1a1a" stroke-width="2.4" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" fill="#f7f1e4"/>
+  <!-- 猫：三角耳圆脸 -->
+  <circle cx="64" cy="70" r="24" stroke="#1a1a1a" stroke-width="3" fill="none"/>
+  <path d="M44 56 L40 34 L58 52" stroke="#1a1a1a" stroke-width="2.6" stroke-linejoin="round" fill="none"/>
+  <path d="M84 56 L88 34 L70 52" stroke="#1a1a1a" stroke-width="2.6" stroke-linejoin="round" fill="none"/>
+  <circle cx="54" cy="68" r="2" fill="#1a1a1a"/>
+  <circle cx="74" cy="68" r="2" fill="#1a1a1a"/>
+  <path d="M60 78 C64 82, 68 82, 72 78" stroke="#1a1a1a" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M88 78 C102 72, 108 86, 96 92" stroke="#1a1a1a" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+</svg>

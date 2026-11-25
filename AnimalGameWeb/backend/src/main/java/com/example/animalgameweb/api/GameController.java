@@ -40,5 +40,13 @@ public class GameController {
         if (state == null) return ResponseEntity.notFound().build();
         return ResponseEntity.ok(state);
     }
+
+    @PostMapping("{id}/ai-turn")
+    public ResponseEntity<GameService.AiTurnResponse> aiTurn(@PathVariable String id,
+                                                             @RequestParam("username") String username) {
+        GameService.AiTurnResponse resp = service.aiTurn(id, username);
+        if (resp == null) return ResponseEntity.notFound().build();
+        return ResponseEntity.ok(resp);
+    }
 }
 
